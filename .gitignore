@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+chroma_db/
+*.egg-info/
+dist/
+build/
+node_modules/
+frontend/dist/
+frontend/node_modules/
+.DS_Store
+*.log
+localmind-specs/
