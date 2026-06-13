@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Trash2, FileText, AlertCircle, Plus, X, MessageSquare, Pencil, Check } from "lucide-react";
+import { RefreshCw, Trash2, FileText, AlertCircle, Plus, X, MessageSquare, Pencil, Check, Settings as SettingsIcon } from "lucide-react";
 import { getSources, deleteSource, updateSession, deleteSession, bulkDeleteSources, ingestText } from "../hooks/useChat";
 import FileUploader from "./FileUploader";
 import DocumentPreview from "./DocumentPreview";
 import TextPasteModal from "./TextPasteModal";
+import SettingsModal from "./SettingsModal";
 import BrandLogo from "./BrandLogo";
 import SystemStatus from "./SystemStatus";
 import ThemeToggle from "./ThemeToggle";
@@ -32,6 +33,7 @@ export default function Sidebar({
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [showSettings, setShowSettings] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -392,14 +394,24 @@ export default function Sidebar({
         </div>
 
         <div className="px-4 py-3 border-t border-line">
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-[10px] font-mono text-fg-muted hover:text-accent transition-colors mb-2.5"
-          >
-            <RefreshCw size={11} className={loading ? "animate-spin" : ""} aria-hidden="true" />
-            refresh
-          </button>
+          <div className="flex items-center justify-between mb-2.5">
+            <button
+              onClick={refresh}
+              disabled={loading}
+              className="flex items-center gap-1.5 text-[10px] font-mono text-fg-muted hover:text-accent transition-colors"
+            >
+              <RefreshCw size={11} className={loading ? "animate-spin" : ""} aria-hidden="true" />
+              refresh
+            </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-fg-muted hover:text-accent text-[11px] font-sans transition-colors"
+              aria-label="Open settings"
+            >
+              <SettingsIcon size={12} aria-hidden="true" />
+              Settings
+            </button>
+          </div>
           <SystemStatus vectorCount={totalChunks} />
         </div>
       </aside>
@@ -416,6 +428,7 @@ export default function Sidebar({
           onSubmit={handlePasteSubmit}
         />
       )}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </>
   );
 }
