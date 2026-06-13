@@ -72,3 +72,107 @@ def _now() -> str:
 
 def _gen_id() -> str:
     return uuid.uuid4().hex[:12]
+
+
+def create_session(
+    title: str = "New Chat",
+    model: str | None = None,
+    doc_ids: list[str] | None = None,
+) -> dict:
+    conn = get_db()
+    session_id = _gen_id()
+    now = _now()
+    doc_ids_json = json.dumps(doc_ids or [])
+    conn.execute(
+        """INSERT INTO sessions (id, title, doc_ids, model, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (session_id, title, doc_ids_json, model, now, now),
+    )
+    conn.commit()
+    return {
+        "id": session_id,
+        "title": title,
+        "doc_ids": doc_ids or [],
+        "model": model,
+        "created_at": now,
+        "updated_at": now,
+        "messages": [],
+    }
+
+
+def get_sessions() -> list[dict]:
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT s.id, s.title, s.updated_at,
+                  (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) as message_count
+           FROM sessions s
+           ORDER BY s.updated_at DESC"""
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_session(session_id: str) -> dict | None:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM sessions WHERE id = ?", (session_id,)
+    ).fetchone()
+    if not row:
+        return None
+
+    session = dict(row)
+    session["doc_ids"] = json.loads(session.get("doc_ids", "[]"))
+
+    msg_rows = conn.execute(
+        "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC",
+        (session_id,),
+    ).fetchall()
+
+    messages = []
+    for m in msg_rows:
+        msg = dict(m)
+        if msg.get("sources"):
+            msg["sources"] = json.loads(msg["sources"])
+        messages.append(msg)
+
+    session["messages"] = messages
+    return session
+
+
+def update_session(
+    session_id: str,
+    title: str | None = None,
+    model: str | None = None,
+    doc_ids: list[str] | None = None,
+) -> dict | None:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM sessions WHERE id = ?", (session_id,)
+    ).fetchone()
+    if not row:
+        return None
+
+    existing = dict(row)
+    new_title = title if title is not None else existing["title"]
+    new_model = model if model is not None else existing["model"]
+    new_doc_ids = json.dumps(doc_ids) if doc_ids is not None else existing["doc_ids"]
+    now = _now()
+
+    conn.execute(
+        """UPDATE sessions SET title = ?, model = ?, doc_ids = ?, updated_at = ?
+           WHERE id = ?""",
+        (new_title, new_model, new_doc_ids, now, session_id),
+    )
+    conn.commit()
+    return get_session(session_id)
+
+
+def delete_session(session_id: str) -> bool:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM sessions WHERE id = ?", (session_id,)
+    ).fetchone()
+    if not row:
+        return False
+    conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    return True
