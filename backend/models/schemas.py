@@ -28,11 +28,18 @@ class SourceInfo(BaseModel):
     filename: str
     chunks: int
     ingested_at: str
-    size_kb: float
+    size_kb: float = 0.0
+    file_type: str = "unknown"
+    word_count: int = 0
 
 
 class SourcesResponse(BaseModel):
     sources: list[SourceInfo]
+
+
+class TextIngestRequest(BaseModel):
+    text: str
+    title: str | None = None
 
 
 class DeleteResponse(BaseModel):
