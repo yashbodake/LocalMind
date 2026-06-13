@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Menu, AlertCircle } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
 import TypingIndicator from "./TypingIndicator";
 import ScrollToBottom from "./ScrollToBottom";
 import BrandLogo from "./BrandLogo";
-import { queryStream } from "../hooks/useChat";
+import { queryStream, getSession, saveMessage } from "../hooks/useChat";
 
 const MAX_HISTORY_TURNS = 5;
 
@@ -16,10 +16,13 @@ const SUGGESTED_PROMPTS = [
 ];
 
 export default function ChatWindow({
+  sessionId,
   selectedModel,
   onSelectModel,
   selectedDocIds,
   onOpenSidebar,
+  onSessionLoaded,
+  onMessageSaved,
 }) {
   const [messages, setMessages] = useState([]);
   const [streaming, setStreaming] = useState(false);
@@ -30,6 +33,26 @@ export default function ChatWindow({
   const abortRef = useRef(null);
   const lastQueryRef = useRef(null);
   const latencyRef = useRef(0);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    setMessages([]);
+    setError(null);
+    getSession(sessionId)
+      .then((data) => {
+        const loadedMsgs = (data.messages || []).map((m) => ({
+          role: m.role,
+          content: m.content,
+          sources: m.sources || [],
+          latencyMs: m.latency_ms,
+        }));
+        setMessages(loadedMsgs);
+        onSessionLoaded?.(data);
+      })
+      .catch(() => {
+        setError("Failed to load conversation.");
+      });
+  }, [sessionId]);
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -91,6 +114,24 @@ export default function ChatWindow({
             ...updated[updated.length - 1],
             latencyMs: elapsed,
           };
+
+          if (sessionId) {
+            saveMessage(sessionId, { role: "user", content: question })
+              .catch(() => {});
+            saveMessage(sessionId, {
+              role: "assistant",
+              content: assistantContent,
+              latency_ms: elapsed,
+              model: selectedModel,
+            })
+              .then((res) => {
+                if (res.auto_title) {
+                  onMessageSaved?.(res.auto_title);
+                }
+              })
+              .catch(() => {});
+          }
+
           return updated;
         });
       },
