@@ -1,17 +1,21 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import ModelSelector from "./ModelSelector";
 
-export default function ChatInput({
+const ChatInput = forwardRef(function ChatInput({
   onSend,
   onStop,
   streaming,
   selectedModel,
   onSelectModel,
   selectedDocIds,
-}) {
+}, ref) {
   const [input, setInput] = useState("");
   const textareaRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => textareaRef.current?.focus(),
+  }));
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -88,4 +92,6 @@ export default function ChatInput({
       </div>
     </div>
   );
-}
+});
+
+export default ChatInput;
