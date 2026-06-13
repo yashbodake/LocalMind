@@ -1,9 +1,20 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Trash2, FileText, AlertCircle } from "lucide-react";
+import { RefreshCw, Trash2, FileText, AlertCircle, Plus, X } from "lucide-react";
 import { getSources, deleteSource } from "../hooks/useChat";
 import FileUploader from "./FileUploader";
+import BrandLogo from "./BrandLogo";
+import SystemStatus from "./SystemStatus";
+import ThemeToggle from "./ThemeToggle";
 
-export default function Sidebar({ onUploadSuccess, selectedDocIds, onSelectDocIds }) {
+export default function Sidebar({
+  selectedDocIds,
+  onSelectDocIds,
+  sidebarOpen,
+  onCloseSidebar,
+  theme,
+  onToggleTheme,
+  onNewChat,
+}) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -38,11 +49,6 @@ export default function Sidebar({ onUploadSuccess, selectedDocIds, onSelectDocId
     }
   };
 
-  const handleUploadSuccess = (result) => {
-    refresh();
-    onUploadSuccess?.(result);
-  };
-
   const toggleDoc = (docId) => {
     if (!selectedDocIds) return;
     if (selectedDocIds.includes(docId)) {
@@ -65,86 +71,123 @@ export default function Sidebar({ onUploadSuccess, selectedDocIds, onSelectDocId
     }
   };
 
+  const totalChunks = sources.reduce((sum, s) => sum + s.chunks, 0);
+
   return (
-    <aside className="w-72 border-r border-gray-200 bg-white flex flex-col h-full">
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="font-semibold text-gray-800 text-sm">Sources</h2>
-        <div className="flex items-center gap-2">
+    <>
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={onCloseSidebar}
+        />
+      )}
+      <aside
+        className={`w-[248px] bg-surface border-r border-line flex flex-col h-full shrink-0 z-40 transition-transform duration-200
+        ${sidebarOpen ? "fixed md:relative translate-x-0" : "fixed md:relative -translate-x-full md:translate-x-0"}`}
+      >
+        <div className="p-4 border-b border-line flex items-center justify-between">
+          <BrandLogo />
+          <div className="flex items-center gap-2">
+            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+            <button
+              onClick={onCloseSidebar}
+              className="md:hidden p-1.5 rounded-lg text-fg-muted hover:text-fg-secondary"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-3 py-2.5">
+          <button
+            onClick={onNewChat}
+            className="w-full flex items-center gap-2 px-3 py-2 border border-line rounded-lg text-fg-secondary hover:border-accent/30 hover:text-accent text-xs font-mono transition-colors"
+          >
+            <Plus size={14} />
+            new --chat
+          </button>
+        </div>
+
+        <div className="px-4 py-1">
+          <FileUploader onSuccess={refresh} />
+        </div>
+
+        {error && (
+          <div className="mx-3 mb-2 flex items-center gap-1.5 text-xs text-accent bg-accent/5 border border-accent/20 rounded-md px-3 py-2">
+            <AlertCircle size={12} className="shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <div className="px-4 py-1 flex items-center justify-between">
+          <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-fg-muted">
+            // sources ({sources.length})
+          </span>
           {sources.length > 0 && (
             <button
               onClick={toggleAll}
-              className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
-              title="Toggle all"
+              className="text-[10px] font-mono text-fg-muted hover:text-accent transition-colors"
             >
-              {allSelected() ? "Deselect all" : "Select all"}
+              {allSelected() ? "deselect all" : "select all"}
             </button>
           )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 pb-2">
+          {sources.length === 0 && !loading ? (
+            <p className="text-xs text-fg-muted text-center py-8 px-4">
+              Upload documents to get started
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {sources.map((s) => {
+                const isChecked = selectedDocIds?.includes(s.doc_id);
+                return (
+                  <li
+                    key={s.doc_id}
+                    className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors border border-transparent
+                      ${isChecked ? "bg-accent/5 hover:bg-accent/8" : "opacity-40 hover:opacity-70 hover:bg-elevated"}`}
+                    onClick={() => toggleDoc(s.doc_id)}
+                  >
+                    <div className={`w-3.5 h-3.5 rounded shrink-0 border flex items-center justify-center transition-colors
+                      ${isChecked ? "bg-accent/15 border-accent" : "border-line-hover"}`}>
+                      {isChecked && (
+                        <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                          <path d="M1 3L3 5L7 1" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <FileText size={14} className="text-fg-muted shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-fg-secondary truncate">{s.filename}</p>
+                    </div>
+                    <span className="font-mono text-[10px] text-fg-muted shrink-0">{s.chunks}ch</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(s.doc_id); }}
+                      disabled={deleting === s.doc_id}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent transition-all"
+                    >
+                      <Trash2 size={12} className={deleting === s.doc_id ? "animate-spin" : ""} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="px-4 py-3 border-t border-line">
           <button
             onClick={refresh}
             disabled={loading}
-            className="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition-colors"
-            title="Refresh"
+            className="flex items-center gap-1.5 text-[10px] font-mono text-fg-muted hover:text-accent transition-colors mb-2.5"
           >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+            refresh
           </button>
+          <SystemStatus vectorCount={totalChunks} />
         </div>
-      </div>
-
-      <div className="p-4">
-        <FileUploader onSuccess={handleUploadSuccess} />
-      </div>
-
-      {error && (
-        <div className="mx-4 mb-2 flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
-          <AlertCircle size={12} className="shrink-0" />
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        {sources.length === 0 && !loading ? (
-          <p className="text-sm text-gray-400 text-center py-8">
-            No documents yet
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {sources.map((s) => {
-              const isChecked = selectedDocIds?.includes(s.doc_id);
-              return (
-                <li
-                  key={s.doc_id}
-                  className={`flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 group ${
-                    isChecked ? "" : "opacity-40"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isChecked || false}
-                    onChange={() => toggleDoc(s.doc_id)}
-                    className="w-3.5 h-3.5 rounded shrink-0 accent-blue-600"
-                  />
-                  <FileText size={16} className="text-gray-400 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-700 truncate">{s.filename}</p>
-                    <p className="text-xs text-gray-400">{s.chunks} chunks</p>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(s.doc_id)}
-                    disabled={deleting === s.doc_id}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all disabled:opacity-100"
-                    title="Delete"
-                  >
-                    <Trash2
-                      size={14}
-                      className={deleting === s.doc_id ? "animate-spin" : ""}
-                    />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
