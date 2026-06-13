@@ -9,6 +9,7 @@ export default defineConfig({
       '/sources': 'http://localhost:8000',
       '/query': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
+      '/models': 'http://localhost:8000',
     },
   },
 })
