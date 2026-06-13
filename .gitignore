@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 chroma_db/
+localmind.db
+localmind.db-journal
 *.egg-info/
 dist/
 build/
