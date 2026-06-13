@@ -6,6 +6,7 @@ import yaml
 from ingest.embedder import _get_model, _get_collection
 from models.schemas import SourceChunk
 from retrieval.reranker import rerank
+from database import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +26,13 @@ def retrieve(
     config = _load_config()
     retrieval_cfg = config["retrieval"]
 
-    if top_k is None:
-        top_k = retrieval_cfg["top_k"]
+    user_top_k = get_setting("retrieval.top_k")
+    user_threshold = get_setting("retrieval.similarity_threshold")
 
-    threshold = retrieval_cfg["similarity_threshold"]
+    if top_k is None:
+        top_k = int(user_top_k) if user_top_k else retrieval_cfg["top_k"]
+
+    threshold = float(user_threshold) if user_threshold else retrieval_cfg["similarity_threshold"]
 
     reranker_cfg = retrieval_cfg.get("reranker", {})
     reranker_enabled = reranker_cfg.get("enabled", False)
