@@ -213,10 +213,13 @@ async def query_stream(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Vector store error: {str(e)}")
 
     async def stream_generator():
-        async for token in stream(
-            request.question, chunks, history=request.history, model=request.model
-        ):
-            yield f"data: {token}\n\n"
+        try:
+            async for token in stream(
+                request.question, chunks, history=request.history, model=request.model
+            ):
+                yield f"data: {token}\n\n"
+        except Exception:
+            logger.exception("Stream interrupted")
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
