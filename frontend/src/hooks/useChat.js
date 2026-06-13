@@ -28,11 +28,11 @@ export async function deleteSource(id) {
   return res.json();
 }
 
-export async function query(question) {
+export async function query(question, { history, model, doc_ids } = {}) {
   const res = await fetch(`${API_BASE}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history, model, doc_ids }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -41,20 +41,55 @@ export async function query(question) {
   return res.json();
 }
 
-export function queryStream(question, onChunk, onDone) {
-  const source = new EventSource(
-    `${API_BASE}/query/stream?q=${encodeURIComponent(question)}`
-  );
-  source.onmessage = (e) => {
-    if (e.data === "[DONE]") {
-      onDone();
-      source.close();
-      return;
+export async function queryStream(
+  question,
+  { history, model, doc_ids },
+  onChunk,
+  onDone,
+  onError
+) {
+  try {
+    const res = await fetch(`${API_BASE}/query/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, history, model, doc_ids }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Stream request failed");
     }
-    onChunk(e.data);
-  };
-  source.onerror = () => {
-    source.close();
-  };
-  return source;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") {
+            onDone();
+            return;
+          }
+          onChunk(data);
+        }
+      }
+    }
+    onDone();
+  } catch (err) {
+    onError(err);
+  }
+}
+
+export async function getModels() {
+  const res = await fetch(`${API_BASE}/models`);
+  if (!res.ok) throw new Error("Failed to fetch models");
+  return res.json();
 }
