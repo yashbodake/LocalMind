@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 
 from models.schemas import SourceChunk, HistoryMessage
 from llm.client import get_client, load_config
+from database import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,25 @@ def _build_context(chunks: list[SourceChunk]) -> str:
     return "\n\n".join(parts)
 
 
+def _get_effective_llm_params(model: str | None = None) -> tuple[float, int, str]:
+    config = load_config()
+    llm_cfg = config["llm"]
+    use_model = model or llm_cfg["model"]
+
+    temp_str = get_setting("llm.temperature")
+    max_tokens_str = get_setting("llm.max_tokens")
+
+    temperature = float(temp_str) if temp_str else llm_cfg["temperature"]
+    max_tokens = int(max_tokens_str) if max_tokens_str else llm_cfg["max_tokens"]
+
+    return temperature, max_tokens, use_model
+
+
+def _get_effective_system_prompt() -> str:
+    override = get_setting("llm.system_prompt")
+    return override.strip() if override and override.strip() else SYSTEM_PROMPT
+
+
 def _build_messages(
     question: str,
     chunks: list[SourceChunk],
@@ -41,7 +61,7 @@ def _build_messages(
     context = _build_context(chunks)
 
     messages: list[dict] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": _get_effective_system_prompt()},
     ]
 
     if history:
@@ -73,20 +93,18 @@ def generate(
     model: str | None = None,
 ) -> str:
     client = get_client()
-    config = load_config()
-    llm_cfg = config["llm"]
 
     if not chunks:
         return "I couldn't find this in your knowledge base."
 
     messages = _build_messages(question, chunks, history)
-    use_model = model or llm_cfg["model"]
+    temperature, max_tokens, use_model = _get_effective_llm_params(model)
 
     response = client.chat.completions.create(
         model=use_model,
         messages=messages,
-        max_tokens=llm_cfg["max_tokens"],
-        temperature=llm_cfg["temperature"],
+        max_tokens=max_tokens,
+        temperature=temperature,
         stream=False,
     )
 
@@ -102,15 +120,13 @@ async def stream(
     model: str | None = None,
 ) -> AsyncGenerator[str, None]:
     client = get_client()
-    config = load_config()
-    llm_cfg = config["llm"]
 
     if not chunks:
         yield "I couldn't find this in your knowledge base."
         return
 
     messages = _build_messages(question, chunks, history)
-    use_model = model or llm_cfg["model"]
+    temperature, max_tokens, use_model = _get_effective_llm_params(model)
 
     loop = asyncio.get_event_loop()
 
@@ -119,8 +135,8 @@ async def stream(
         lambda: client.chat.completions.create(
             model=use_model,
             messages=messages,
-            max_tokens=llm_cfg["max_tokens"],
-            temperature=llm_cfg["temperature"],
+            max_tokens=max_tokens,
+            temperature=temperature,
             stream=True,
         ),
     )
