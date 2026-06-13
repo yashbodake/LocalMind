@@ -1,30 +1,32 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
 
-export default function SourceCard({ filename, chunk_index, content, score }) {
+export default function SourceCard({ index, filename, chunk_index, content, score }) {
   const [open, setOpen] = useState(false);
 
+  const snippet = content.length > 100 ? content.slice(0, 100) + "..." : content;
+
   return (
-    <div className="border border-gray-200 rounded-lg bg-gray-50 text-sm">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-100 transition-colors"
-      >
-        {open ? (
-          <ChevronDown size={14} className="text-gray-500 shrink-0" />
-        ) : (
-          <ChevronRight size={14} className="text-gray-500 shrink-0" />
-        )}
-        <FileText size={14} className="text-gray-400 shrink-0" />
-        <span className="truncate text-gray-700">{filename}</span>
-        <span className="ml-auto text-xs text-gray-400">chunk {chunk_index}</span>
-        <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-          {score.toFixed(2)}
+    <div
+      className="bg-surface border border-line rounded-lg p-3 cursor-pointer hover:border-accent/20 transition-colors"
+      onClick={() => setOpen(!open)}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="font-mono text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+          [{index}]
         </span>
-      </button>
+        <span className="text-fg-secondary text-xs font-medium truncate">{filename}</span>
+        {score != null && (
+          <span className="ml-auto font-mono text-[10px] text-fg-muted shrink-0">
+            {score.toFixed(2)}
+          </span>
+        )}
+      </div>
+      <p className="text-fg-muted text-[11px] leading-relaxed font-sans">
+        {open ? content : snippet}
+      </p>
       {open && (
-        <div className="px-3 pb-3 text-gray-600 leading-relaxed whitespace-pre-wrap border-t border-gray-200 pt-2">
-          {content}
+        <div className="mt-2 pt-2 border-t border-line">
+          <span className="font-mono text-[10px] text-fg-muted">chunk {chunk_index}</span>
         </div>
       )}
     </div>
