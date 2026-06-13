@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -10,9 +11,11 @@ from database import (
     delete_session as db_delete_session,
     save_message as db_save_message,
     get_message_count,
+    update_message_followups as db_update_message_followups,
 )
 from models.session_schemas import SessionCreate, SessionUpdate, MessageCreate
 from llm.title_generator import generate_title
+from llm.followup_generator import generate_followups
 
 logger = logging.getLogger(__name__)
 
@@ -77,18 +80,39 @@ async def save_message(session_id: str, payload: MessageCreate):
         raise HTTPException(status_code=404, detail="Session not found")
 
     auto_title = None
+    followups = None
+
     if payload.role == "assistant":
         session = db_get_session(session_id)
+
+        last_user_msg = next(
+            (m for m in reversed(session["messages"]) if m["role"] == "user"), None
+        )
+        if last_user_msg:
+            followups = await asyncio.to_thread(
+                generate_followups,
+                last_user_msg["content"],
+                payload.content,
+                payload.model,
+            )
+
         if session and session["title"] == "New Chat":
             user_msgs = [m for m in session["messages"] if m["role"] == "user"]
             asst_msgs = [m for m in session["messages"] if m["role"] == "assistant"]
             if len(user_msgs) == 1 and len(asst_msgs) == 1:
-                title = generate_title(
-                    user_msgs[0]["content"], payload.content, payload.model
+                title = await asyncio.to_thread(
+                    generate_title,
+                    user_msgs[0]["content"],
+                    payload.content,
+                    payload.model,
                 )
                 if title:
                     db_update_session(session_id, title=title)
                     auto_title = title
+
+    if followups:
+        db_update_message_followups(result["id"], followups)
+        result["followups"] = followups
 
     if auto_title:
         result["auto_title"] = auto_title
