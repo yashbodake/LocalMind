@@ -46,13 +46,15 @@ export async function queryStream(
   { history, model, doc_ids },
   onChunk,
   onDone,
-  onError
+  onError,
+  signal
 ) {
   try {
     const res = await fetch(`${API_BASE}/query/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, history, model, doc_ids }),
+      signal,
     });
 
     if (!res.ok) {
@@ -84,7 +86,9 @@ export async function queryStream(
     }
     onDone();
   } catch (err) {
-    onError(err);
+    if (err.name !== "AbortError") {
+      onError(err);
+    }
   }
 }
 
