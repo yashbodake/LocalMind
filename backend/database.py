@@ -66,7 +66,7 @@ def init_db() -> None:
     conn.commit()
     try:
         conn.execute("ALTER TABLE messages ADD COLUMN followups TEXT DEFAULT NULL")
-    except Exception:
+    except sqlite3.OperationalError:
         pass
     logger.info("Database schema initialized")
 

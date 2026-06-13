@@ -1,15 +1,24 @@
 import os
+from pathlib import Path
 
 import yaml
 from openai import OpenAI
 
-_CONFIG_PATH = "config.yaml"
+_CONFIG_PATHS = [
+    "config.yaml",
+    str(Path(__file__).resolve().parent.parent / "config.yaml"),
+]
 _client: OpenAI | None = None
 
 
 def load_config() -> dict:
-    with open(_CONFIG_PATH, "r") as f:
-        return yaml.safe_load(f)
+    for path in _CONFIG_PATHS:
+        try:
+            with open(path, "r") as f:
+                return yaml.safe_load(f)
+        except FileNotFoundError:
+            continue
+    raise FileNotFoundError("config.yaml not found in any expected location")
 
 
 def get_client() -> OpenAI:

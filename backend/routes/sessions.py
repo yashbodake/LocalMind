@@ -88,27 +88,40 @@ async def save_message(session_id: str, payload: MessageCreate):
         last_user_msg = next(
             (m for m in reversed(session["messages"]) if m["role"] == "user"), None
         )
+
+        user_msgs = [m for m in session["messages"] if m["role"] == "user"]
+        asst_msgs = [m for m in session["messages"] if m["role"] == "assistant"]
+        needs_title = session and session["title"] == "New Chat" and len(user_msgs) == 1 and len(asst_msgs) == 1
+
+        tasks = []
+        task_keys = []
+
         if last_user_msg:
-            followups = await asyncio.to_thread(
+            tasks.append(asyncio.to_thread(
                 generate_followups,
                 last_user_msg["content"],
                 payload.content,
                 payload.model,
-            )
+            ))
+            task_keys.append("followups")
 
-        if session and session["title"] == "New Chat":
-            user_msgs = [m for m in session["messages"] if m["role"] == "user"]
-            asst_msgs = [m for m in session["messages"] if m["role"] == "assistant"]
-            if len(user_msgs) == 1 and len(asst_msgs) == 1:
-                title = await asyncio.to_thread(
-                    generate_title,
-                    user_msgs[0]["content"],
-                    payload.content,
-                    payload.model,
-                )
-                if title:
-                    db_update_session(session_id, title=title)
-                    auto_title = title
+        if needs_title:
+            tasks.append(asyncio.to_thread(
+                generate_title,
+                user_msgs[0]["content"],
+                payload.content,
+                payload.model,
+            ))
+            task_keys.append("title")
+
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            for key, value in zip(task_keys, results):
+                if key == "followups" and value:
+                    followups = value
+                elif key == "title" and value:
+                    db_update_session(session_id, title=value)
+                    auto_title = value
 
     if followups:
         db_update_message_followups(result["id"], followups)

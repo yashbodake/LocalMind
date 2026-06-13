@@ -33,6 +33,8 @@ export default function ChatWindow({
   const abortRef = useRef(null);
   const lastQueryRef = useRef(null);
   const latencyRef = useRef(0);
+  const onSessionLoadedRef = useRef(onSessionLoaded);
+  onSessionLoadedRef.current = onSessionLoaded;
 
   useEffect(() => {
     if (!sessionId) return;
@@ -48,7 +50,7 @@ export default function ChatWindow({
           followups: m.followups || null,
         }));
         setMessages(loadedMsgs);
-        onSessionLoaded?.(data);
+        onSessionLoadedRef.current?.(data);
       })
       .catch(() => {
         setError("Failed to load conversation.");
@@ -147,7 +149,7 @@ export default function ChatWindow({
                 });
               }
             })
-            .catch(() => {});
+            .catch((err) => console.error("Save failed:", err));
         }
       },
       (err) => {

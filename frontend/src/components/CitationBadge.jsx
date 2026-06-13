@@ -1,5 +1,5 @@
 export default function CitationBadge({ index, sources }) {
-  if (index > sources.length) return <span className="text-fg-muted">[{index}]</span>;
+  if (index < 1 || index > sources.length) return <span className="text-fg-muted">[{index}]</span>;
   return (
     <sup>
       <button
