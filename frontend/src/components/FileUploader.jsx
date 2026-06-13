@@ -39,34 +39,24 @@ export default function FileUploader({ onSuccess }) {
     handleFiles(Array.from(e.dataTransfer.files));
   };
 
-  const onDragOver = (e) => {
-    e.preventDefault();
-    setDragging(true);
-  };
-
-  const onDragLeave = () => setDragging(false);
-
   return (
     <div>
       <div
         onDrop={onDrop}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
         onClick={() => !uploading && inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
-          dragging
-            ? "border-blue-400 bg-blue-50"
-            : "border-gray-300 hover:border-gray-400"
-        } ${uploading ? "opacity-60 cursor-wait" : ""}`}
+        className={`border border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors
+          ${dragging ? "border-accent/40 bg-accent/5" : "border-line hover:border-line-hover"}`}
       >
         <UploadCloud
-          size={20}
-          className={`mx-auto mb-1.5 ${dragging ? "text-blue-500" : "text-gray-400"}`}
+          size={18}
+          className={`mx-auto mb-1 ${dragging ? "text-accent" : "text-fg-muted"}`}
         />
-        <p className="text-xs text-gray-600">
-          {uploading ? "Uploading..." : "Drop files or click to browse"}
+        <p className="text-[11px] text-fg-secondary font-sans">
+          {uploading ? "Uploading..." : "Drop files or click"}
         </p>
-        <p className="text-xs text-gray-400 mt-0.5">.pdf, .md, .txt</p>
+        <p className="text-[10px] text-fg-muted font-mono mt-0.5">.pdf .md .txt</p>
         <input
           ref={inputRef}
           type="file"
@@ -78,24 +68,24 @@ export default function FileUploader({ onSuccess }) {
       </div>
 
       {uploading && (
-        <div className="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div className="mt-2 h-1 bg-line rounded-full overflow-hidden">
           <div
-            className="h-full bg-blue-500 rounded-full transition-all duration-500"
+            className="h-full bg-accent rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
       )}
 
       {error && (
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
-          <AlertCircle size={12} />
+        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-accent font-sans">
+          <AlertCircle size={11} />
           {error}
         </div>
       )}
 
       {successMsg && (
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600">
-          <CheckCircle size={12} />
+        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-green-500 font-sans">
+          <CheckCircle size={11} />
           {successMsg}
         </div>
       )}
