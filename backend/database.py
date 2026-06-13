@@ -176,3 +176,54 @@ def delete_session(session_id: str) -> bool:
     conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
     conn.commit()
     return True
+
+
+def save_message(
+    session_id: str,
+    role: str,
+    content: str,
+    sources: list[dict] | None = None,
+    latency_ms: int | None = None,
+    model: str | None = None,
+) -> dict | None:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM sessions WHERE id = ?", (session_id,)
+    ).fetchone()
+    if not row:
+        return None
+
+    msg_id = _gen_id()
+    now = _now()
+    sources_json = json.dumps(sources) if sources else None
+
+    conn.execute(
+        """INSERT INTO messages
+           (id, session_id, role, content, sources, latency_ms, model, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (msg_id, session_id, role, content, sources_json, latency_ms, model, now),
+    )
+    conn.execute(
+        "UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id)
+    )
+    conn.commit()
+
+    return {
+        "id": msg_id,
+        "session_id": session_id,
+        "role": role,
+        "content": content,
+        "sources": sources,
+        "latency_ms": latency_ms,
+        "model": model,
+        "created_at": now,
+    }
+
+
+def get_message_count(session_id: str) -> int:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT COUNT(*) as count FROM messages WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    return row["count"] if row else 0
