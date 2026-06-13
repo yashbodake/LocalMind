@@ -74,6 +74,12 @@ def init_db() -> None:
             content TEXT,
             ingested_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
     )
     conn.commit()
@@ -338,3 +344,29 @@ def delete_documents_bulk(doc_ids):
     cursor.execute(f"DELETE FROM documents WHERE doc_id IN ({placeholders})", doc_ids)
     conn.commit()
     return cursor.rowcount
+
+
+def get_setting(key: str) -> str | None:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    return row["value"] if row else None
+
+
+def set_setting(key: str, value: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?",
+        (key, value, _now(), value, _now())
+    )
+    conn.commit()
+
+
+def get_all_settings() -> dict[str, str]:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT key, value FROM settings")
+    return {row["key"]: row["value"] for row in cursor.fetchall()}
