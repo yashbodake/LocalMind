@@ -20,7 +20,7 @@ Backend Changes:
   database.py
     └─ truncate_messages(session_id, from_index) → deletes messages from index N onwards
   routes/sessions.py
-    └─ DELETE /sessions/{id}/messages?from={N} endpoint
+    └─ DELETE /sessions/{id}/messages?from_index={N} endpoint
 
 Frontend Changes:
   MessageBubble.jsx
@@ -152,6 +152,10 @@ def truncate_messages(session_id: str, from_index: int) -> int:
         f"DELETE FROM messages WHERE id IN ({placeholders})",
         ids_to_delete
     )
+    cursor.execute(
+        "UPDATE sessions SET updated_at = ? WHERE id = ?",
+        (datetime.now(UTC).isoformat(), session_id)
+    )
     conn.commit()
     return cursor.rowcount
 ```
@@ -174,7 +178,7 @@ async def truncate_session_messages(session_id: str, from_index: int = 0):
 
 ```javascript
 export async function truncateMessages(sessionId, fromIndex) {
-  const res = await fetch(`/sessions/${sessionId}/messages?from_index=${fromIndex}`, {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/messages?from_index=${fromIndex}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to truncate messages");
@@ -200,6 +204,7 @@ export default function MessageBubble({
   onFollowUp,
   onEdit,
   messageIndex,
+  streaming,
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(content);
@@ -269,8 +274,9 @@ User message rendering with edit capability:
           <div className="flex items-center gap-2 mb-1.5">
             <button
               onClick={() => setEditing(true)}
-              className="opacity-0 group-hover:opacity-100 text-fg-muted hover:text-accent transition-opacity"
+              className={`text-fg-muted hover:text-accent transition-opacity ${streaming ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"}`}
               aria-label="Edit question"
+              disabled={streaming}
             >
               <Pencil size={11} aria-hidden="true" />
             </button>
@@ -290,21 +296,32 @@ User message rendering with edit capability:
 ### Frontend: ChatWindow.jsx — handleEdit
 
 ```jsx
-import { truncateMessages } from "../hooks/useChat";
-
 const handleEdit = async (messageIndex, newText) => {
-  setStreaming(true);
+  if (streaming) return;
+  setError(null);
+
   const truncateFrom = messageIndex;
-  
+  const savedMessages = [...messages];
+
   setMessages((prev) => {
     const kept = prev.slice(0, truncateFrom);
     return [...kept, { role: "user", content: newText }];
   });
 
-  await truncateMessages(sessionId, truncateFrom);
+  try {
+    await truncateMessages(sessionId, truncateFrom);
+  } catch (err) {
+    console.error("Truncate failed:", err);
+    setMessages(savedMessages);
+    setError("Failed to edit. Please try again.");
+    return;
+  }
+
+  setStreaming(true);
 
   const history = messages
-    .slice(0, truncateFrom)
+    .slice(0, Math.max(0, truncateFrom - MAX_HISTORY_TURNS * 2))
+    .slice(-MAX_HISTORY_TURNS * 2)
     .map((m) => ({ role: m.role, content: m.content }));
 
   setMessages((prev) => [
@@ -380,7 +397,81 @@ const handleEdit = async (messageIndex, newText) => {
 };
 ```
 
-Pass `onEdit={handleEdit}` and `messageIndex={i}` to each MessageBubble in the map.
+### ChatInput.jsx — Expose focus method via forwardRef
+
+```jsx
+import { useImperativeHandle, forwardRef, useState, useRef, useEffect } from "react";
+import { ArrowUp, Square } from "lucide-react";
+import ModelSelector from "./ModelSelector";
+
+const ChatInput = forwardRef(function ChatInput({
+  onSend,
+  onStop,
+  streaming,
+  selectedModel,
+  onSelectModel,
+  selectedDocIds,
+}, ref) {
+  const [input, setInput] = useState("");
+  const textareaRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => textareaRef.current?.focus(),
+  }));
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 168) + "px";
+  }, [input]);
+
+  // ... rest of existing component logic unchanged
+});
+
+export default ChatInput;
+```
+
+### ChatWindow.jsx — sessionTitle state + export wiring
+
+Store session title when loading:
+
+```jsx
+const [sessionTitle, setSessionTitle] = useState("");
+
+// In the getSession().then() block:
+setSessionTitle(data.title || "Conversation");
+```
+
+Export button disabled during streaming:
+
+```jsx
+<button
+  onClick={handleExport}
+  disabled={messages.length === 0 || streaming}
+  className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+  aria-label="Export conversation"
+  title="Export as Markdown"
+>
+  <Download size={16} aria-hidden="true" />
+</button>
+```
+
+### ChatWindow.jsx — Pass streaming + onEdit + messageIndex to MessageBubble
+
+```jsx
+{messages.map((msg, i) => (
+  <MessageBubble
+    key={i}
+    {...msg}
+    messageIndex={i}
+    streaming={streaming}
+    onEdit={msg.role === "user" ? handleEdit : null}
+    onFollowUp={handleFollowUp}
+    onRetry={msg.role === "assistant" && i === messages.length - 1 ? handleRetry : null}
+  />
+))}
+```
 
 ## 3. Export Conversation
 
@@ -470,78 +561,61 @@ The export button needs session title. Pass it from App.jsx via the session data
 
 ### Frontend: useKeyboardShortcuts.js hook
 
-Create `frontend/src/hooks/useKeyboardShortcuts.js`:
+Uses internal refs to avoid re-registering the event listener on every render:
 
 ```javascript
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export function useKeyboardShortcuts({ onNewChat, onFocusInput, onStop, streaming }) {
+  const handlersRef = useRef({ onNewChat, onFocusInput, onStop, streaming });
+  handlersRef.current = { onNewChat, onFocusInput, onStop, streaming };
+
   useEffect(() => {
     const handler = (e) => {
       const mod = e.metaKey || e.ctrlKey;
 
       if (mod && e.key === "k") {
         e.preventDefault();
-        onNewChat?.();
+        handlersRef.current.onNewChat?.();
       }
 
       if (mod && e.key === "l") {
         e.preventDefault();
-        onFocusInput?.();
+        handlersRef.current.onFocusInput?.();
       }
 
-      if (e.key === "Escape" && streaming) {
+      if (e.key === "Escape" && handlersRef.current.streaming) {
         e.preventDefault();
-        onStop?.();
+        handlersRef.current.onStop?.();
       }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onNewChat, onFocusInput, onStop, streaming]);
+  }, []);
 }
 ```
 
-### App.jsx — Wire up shortcuts
+### App.jsx — Wire Cmd+K only (new chat)
+
+Cmd+K (new chat) is global, handled in App.jsx. Cmd+L (focus input) and Esc (stop) are handled in ChatWindow.jsx where the input ref and streaming state live.
 
 ```jsx
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
-import { useRef } from "react";
-
-// In App component:
-const inputFocusRef = useRef(null);
 
 useKeyboardShortcuts({
   onNewChat: newChat,
-  onFocusInput: () => inputFocusRef.current?.(),
+  onFocusInput: null,
   onStop: null,
   streaming: false,
 });
 ```
 
-### ChatInput.jsx — Expose focus method
-
-Use `useImperativeHandle` to expose a focus method:
+### ChatWindow.jsx — Wire Cmd+L + Esc
 
 ```jsx
-import { useImperativeHandle, forwardRef } from "react";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
-const ChatInput = forwardRef(function ChatInput({ ...props }, ref) {
-  const textareaRef = useRef(null);
-
-  useImperativeHandle(ref, () => ({
-    focus: () => textareaRef.current?.focus(),
-  }));
-
-  // ... rest of component
-});
-
-export default ChatInput;
-```
-
-### ChatWindow.jsx — Wire input ref + shortcuts
-
-```jsx
 const inputRef = useRef(null);
 
 useKeyboardShortcuts({
@@ -551,21 +625,21 @@ useKeyboardShortcuts({
   streaming,
 });
 
-// Pass ref to ChatInput:
 <ChatInput ref={inputRef} ... />
 ```
-
-Actually, to avoid wiring complexity, App.jsx handles Cmd+K (new chat) and Cmd+L (focus), while ChatWindow handles Esc (stop). The `useKeyboardShortcuts` hook is called in both places with different handlers.
 
 ## Error Handling
 
 | Scenario | Behavior |
 |---|---|
-| Truncate fails (network/DB error) | Error toast shown, messages stay in UI |
+| Truncate fails (network/DB error) | Messages reverted to saved state, error shown |
 | Export with empty conversation | Button disabled |
+| Export during streaming | Button disabled |
 | Edit to same content | No-op (cancel edit) |
+| Edit while streaming | Edit button hidden + `handleEdit` early-returns |
+| Esc key during edit mode | Cancels edit (textarea handler), does NOT trigger stop (streaming is false during edit) |
 | Keyboard shortcut while typing in input | Cmd+K and Cmd+L still fire (intentional) |
-| Edit while streaming | Edit button hidden during streaming |
+| Code copy fails | Silent no-op (existing pattern) |
 
 ## Constraints
 
