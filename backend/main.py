@@ -19,11 +19,13 @@ from database import (
     delete_documents_bulk,
     get_document,
     get_document_by_hash,
+    get_setting,
     init_db,
     list_documents,
     save_document,
 )
 from routes.sessions import router as sessions_router
+from routes.settings import router as settings_router
 from ingest.chunker import chunk_text
 from ingest.embedder import delete_doc, embed_and_store, list_sources
 from ingest.loader import load_file
@@ -72,6 +74,7 @@ app.add_middleware(
 
 init_db()
 app.include_router(sessions_router)
+app.include_router(settings_router)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -137,7 +140,11 @@ async def ingest_files(files: list[UploadFile] = File(...)):
                 ))
                 continue
 
-            chunks = chunk_text(text)
+            user_cs = get_setting("chunking.chunk_size")
+            user_co = get_setting("chunking.chunk_overlap")
+            cs = int(user_cs) if user_cs else None
+            co = int(user_co) if user_co else None
+            chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
 
             doc_id = uuid.uuid4().hex[:12]
             size_kb = round(len(content) / 1024, 2)
@@ -204,7 +211,11 @@ async def ingest_text(payload: TextIngestRequest):
     size_kb = len(text.encode()) / 1024
     word_count = len(text.split())
 
-    chunks = chunk_text(text)
+    user_cs = get_setting("chunking.chunk_size")
+    user_co = get_setting("chunking.chunk_overlap")
+    cs = int(user_cs) if user_cs else None
+    co = int(user_co) if user_co else None
+    chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
     metadata = {"doc_id": doc_id, "filename": title, "source_path": title}
     embed_and_store(chunks, metadata)
 
