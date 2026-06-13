@@ -12,6 +12,7 @@ from database import (
     save_message as db_save_message,
     get_message_count,
     update_message_followups as db_update_message_followups,
+    truncate_messages as db_truncate_messages,
 )
 from models.session_schemas import SessionCreate, SessionUpdate, MessageCreate
 from llm.title_generator import generate_title
@@ -64,6 +65,12 @@ async def delete_session(session_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "deleted", "id": session_id}
+
+
+@router.delete("/{session_id}/messages")
+async def truncate_session_messages(session_id: str, from_index: int = 0):
+    deleted = db_truncate_messages(session_id, from_index)
+    return {"status": "ok", "deleted_count": deleted}
 
 
 @router.post("/{session_id}/messages")
