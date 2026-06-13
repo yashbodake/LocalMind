@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: dark;
   --color-base: #0c0c0e;
   --color-surface: #0e0e11;
   --color-elevated: #16161a;
@@ -15,6 +16,7 @@
 }
 
 .light {
+  color-scheme: light;
   --color-base: #ffffff;
   --color-surface: #f8fafc;
   --color-elevated: #f1f5f9;
@@ -26,7 +28,17 @@
   --color-accent: #0891b2;
 }
 
-* {
+body,
+div,
+aside,
+button,
+a,
+span,
+li,
+input,
+textarea,
+header,
+footer {
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
@@ -34,6 +46,29 @@ body {
   font-family: 'Inter', sans-serif;
   background-color: var(--color-base);
   color: var(--color-text-primary);
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="checkbox"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 ::-webkit-scrollbar {

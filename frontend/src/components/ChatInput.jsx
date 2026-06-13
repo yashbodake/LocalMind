@@ -46,9 +46,12 @@ export default function ChatInput({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Ask a question..."
+            placeholder="Ask a question…"
             rows={1}
-            className="flex-1 resize-none bg-transparent text-fg placeholder:text-fg-muted text-sm outline-none font-sans leading-relaxed"
+            name="query"
+            autoComplete="off"
+            aria-label="Ask a question"
+            className="flex-1 min-w-0 resize-none bg-transparent text-fg placeholder:text-fg-muted text-sm outline-none focus-visible:outline-none font-sans leading-relaxed"
           />
           <div className="flex items-center gap-2 shrink-0">
             <span className="hidden sm:block font-mono text-[10px] text-fg-muted">
@@ -59,8 +62,9 @@ export default function ChatInput({
                 onClick={onStop}
                 className="w-8 h-8 rounded-lg border border-accent/30 bg-accent/10 text-accent flex items-center justify-center hover:bg-accent/15 transition-colors"
                 title="Stop"
+                aria-label="Stop generating"
               >
-                <Square size={14} />
+                <Square size={14} aria-hidden="true" />
               </button>
             ) : (
               <button
@@ -68,8 +72,9 @@ export default function ChatInput({
                 disabled={!input.trim()}
                 className="w-8 h-8 rounded-lg border border-accent/30 bg-accent/10 text-accent flex items-center justify-center hover:bg-accent/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="Send"
+                aria-label="Send message"
               >
-                <ArrowUp size={16} />
+                <ArrowUp size={16} aria-hidden="true" />
               </button>
             )}
           </div>

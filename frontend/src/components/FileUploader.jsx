@@ -39,27 +39,40 @@ export default function FileUploader({ onSuccess }) {
     handleFiles(Array.from(e.dataTransfer.files));
   };
 
+  const onKey = (e) => {
+    if ((e.key === "Enter" || e.key === " ") && !uploading) {
+      e.preventDefault();
+      inputRef.current?.click();
+    }
+  };
+
   return (
     <div>
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload files — drop or click to browse"
         onDrop={onDrop}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onClick={() => !uploading && inputRef.current?.click()}
+        onKeyDown={onKey}
         className={`border border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors
           ${dragging ? "border-accent/40 bg-accent/5" : "border-line hover:border-line-hover"}`}
       >
         <UploadCloud
           size={18}
+          aria-hidden="true"
           className={`mx-auto mb-1 ${dragging ? "text-accent" : "text-fg-muted"}`}
         />
         <p className="text-[11px] text-fg-secondary font-sans">
-          {uploading ? "Uploading..." : "Drop files or click"}
+          {uploading ? "Uploading…" : "Drop files or click"}
         </p>
         <p className="text-[10px] text-fg-muted font-mono mt-0.5">.pdf .md .txt</p>
         <input
           ref={inputRef}
           type="file"
+          name="documents"
           accept=".pdf,.md,.txt"
           multiple
           className="hidden"
@@ -70,7 +83,7 @@ export default function FileUploader({ onSuccess }) {
       {uploading && (
         <div className="mt-2 h-1 bg-line rounded-full overflow-hidden">
           <div
-            className="h-full bg-accent rounded-full transition-all duration-500"
+            className="h-full bg-accent rounded-full transition-[width] duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -78,14 +91,14 @@ export default function FileUploader({ onSuccess }) {
 
       {error && (
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-accent font-sans">
-          <AlertCircle size={11} />
+          <AlertCircle size={11} aria-hidden="true" />
           {error}
         </div>
       )}
 
       {successMsg && (
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-green-500 font-sans">
-          <CheckCircle size={11} />
+          <CheckCircle size={11} aria-hidden="true" />
           {successMsg}
         </div>
       )}

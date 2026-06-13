@@ -7,6 +7,8 @@ export default function BrandLogo({ size = "md" }) {
       <img
         src="/logo.png"
         alt="LocalMind"
+        width={size === "sm" ? 28 : 32}
+        height={size === "sm" ? 28 : 32}
         className={`${imgSize} rounded-lg object-cover`}
       />
       <div className="flex flex-col leading-none">

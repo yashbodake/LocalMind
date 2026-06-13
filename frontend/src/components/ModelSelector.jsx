@@ -27,17 +27,31 @@ export default function ModelSelector({ selected, onSelect }) {
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono text-accent bg-accent/5 border border-line rounded-lg hover:border-accent/20 transition-colors"
+        aria-label={`Model: ${shortName}. Click to change.`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
       >
         {shortName}
-        <ChevronDown size={11} />
+        <ChevronDown size={11} aria-hidden="true" />
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 mb-1 z-20 bg-surface border border-line rounded-lg shadow-xl min-w-[240px] max-h-64 overflow-y-auto">
+          <button
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+            aria-label="Close model selector"
+            tabIndex={-1}
+          />
+          <div
+            className="absolute bottom-full left-0 mb-1 z-20 bg-surface border border-line rounded-lg shadow-xl min-w-[240px] max-h-64 overflow-y-auto"
+            role="listbox"
+            aria-label="Select model"
+          >
             {models.map((m) => (
               <button
                 key={m}
+                role="option"
+                aria-selected={m === selected}
                 onClick={() => {
                   onSelect(m);
                   setOpen(false);

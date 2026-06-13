@@ -76,13 +76,15 @@ export default function Sidebar({
   return (
     <>
       {sidebarOpen && (
-        <div
+        <button
           className="fixed inset-0 bg-black/50 z-30 md:hidden"
           onClick={onCloseSidebar}
+          aria-label="Close sidebar"
+          tabIndex={-1}
         />
       )}
       <aside
-        className={`w-[248px] bg-surface border-r border-line flex flex-col h-full shrink-0 z-40 transition-transform duration-200
+        className={`w-[248px] bg-surface border-r border-line flex flex-col h-full shrink-0 z-40 transition-transform duration-200 overscroll-contain
         ${sidebarOpen ? "fixed md:relative translate-x-0" : "fixed md:relative -translate-x-full md:translate-x-0"}`}
       >
         <div className="p-4 border-b border-line flex items-center justify-between">
@@ -92,8 +94,9 @@ export default function Sidebar({
             <button
               onClick={onCloseSidebar}
               className="md:hidden p-1.5 rounded-lg text-fg-muted hover:text-fg-secondary"
+              aria-label="Close sidebar"
             >
-              <X size={16} />
+              <X size={16} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -103,7 +106,7 @@ export default function Sidebar({
             onClick={onNewChat}
             className="w-full flex items-center gap-2 px-3 py-2 border border-line rounded-lg text-fg-secondary hover:border-accent/30 hover:text-accent text-xs font-mono transition-colors"
           >
-            <Plus size={14} />
+            <Plus size={14} aria-hidden="true" />
             new --chat
           </button>
         </div>
@@ -114,7 +117,7 @@ export default function Sidebar({
 
         {error && (
           <div className="mx-3 mb-2 flex items-center gap-1.5 text-xs text-accent bg-accent/5 border border-accent/20 rounded-md px-3 py-2">
-            <AlertCircle size={12} className="shrink-0" />
+            <AlertCircle size={12} className="shrink-0" aria-hidden="true" />
             {error}
           </div>
         )}
@@ -133,7 +136,7 @@ export default function Sidebar({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 pb-2">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
           {sources.length === 0 && !loading ? (
             <p className="text-xs text-fg-muted text-center py-8 px-4">
               Upload documents to get started
@@ -145,29 +148,43 @@ export default function Sidebar({
                 return (
                   <li
                     key={s.doc_id}
-                    className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors border border-transparent
+                    className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-transparent
                       ${isChecked ? "bg-accent/5 hover:bg-accent/8" : "opacity-40 hover:opacity-70 hover:bg-elevated"}`}
-                    onClick={() => toggleDoc(s.doc_id)}
                   >
-                    <div className={`w-3.5 h-3.5 rounded shrink-0 border flex items-center justify-center transition-colors
-                      ${isChecked ? "bg-accent/15 border-accent" : "border-line-hover"}`}>
-                      {isChecked && (
-                        <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                          <path d="M1 3L3 5L7 1" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </div>
-                    <FileText size={14} className="text-fg-muted shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs text-fg-secondary truncate">{s.filename}</p>
-                    </div>
-                    <span className="font-mono text-[10px] text-fg-muted shrink-0">{s.chunks}ch</span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(s.doc_id); }}
-                      disabled={deleting === s.doc_id}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent transition-all"
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isChecked}
+                      aria-label={`Source: ${s.filename}`}
+                      className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
+                      onClick={() => toggleDoc(s.doc_id)}
                     >
-                      <Trash2 size={12} className={deleting === s.doc_id ? "animate-spin" : ""} />
+                      <div className={`w-3.5 h-3.5 rounded shrink-0 border flex items-center justify-center transition-colors
+                        ${isChecked ? "bg-accent/15 border-accent" : "border-line-hover"}`}>
+                        {isChecked && (
+                          <svg width="8" height="6" viewBox="0 0 8 6" fill="none" aria-hidden="true">
+                            <path d="M1 3L3 5L7 1" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                      <FileText size={14} className="text-fg-muted shrink-0" aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-fg-secondary truncate">{s.filename}</p>
+                      </div>
+                      <span className="font-mono text-[10px] text-fg-muted shrink-0">{s.chunks}ch</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Delete "${s.filename}"?`)) {
+                          handleDelete(s.doc_id);
+                        }
+                      }}
+                      disabled={deleting === s.doc_id}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent transition-opacity"
+                      aria-label={`Delete ${s.filename}`}
+                    >
+                      <Trash2 size={12} className={deleting === s.doc_id ? "animate-spin" : ""} aria-hidden="true" />
                     </button>
                   </li>
                 );
@@ -182,7 +199,7 @@ export default function Sidebar({
             disabled={loading}
             className="flex items-center gap-1.5 text-[10px] font-mono text-fg-muted hover:text-accent transition-colors mb-2.5"
           >
-            <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={11} className={loading ? "animate-spin" : ""} aria-hidden="true" />
             refresh
           </button>
           <SystemStatus vectorCount={totalChunks} />

@@ -126,12 +126,14 @@ export default function ChatWindow({
 
   return (
     <div className="flex flex-col h-full bg-base relative">
+      <h1 className="sr-only">LocalMind Chat</h1>
       <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-line bg-surface">
         <button
           onClick={onOpenSidebar}
           className="p-1.5 rounded-lg text-fg-secondary hover:text-accent"
+          aria-label="Open sidebar"
         >
-          <Menu size={18} />
+          <Menu size={18} aria-hidden="true" />
         </button>
         <BrandLogo size="sm" />
       </div>
@@ -144,7 +146,7 @@ export default function ChatWindow({
         <div className="max-w-[740px] mx-auto px-6 md:px-9 py-8">
           {messages.length === 0 && !error && (
             <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
-              <img src="/logo.png" alt="LocalMind" className="w-16 h-16 rounded-xl" />
+              <img src="/logo.png" alt="LocalMind" width={64} height={64} className="w-16 h-16 rounded-xl" />
               <h2 className="text-fg text-xl font-semibold font-display">
                 Ask a question about your documents
               </h2>
@@ -176,9 +178,9 @@ export default function ChatWindow({
           {waitingForFirstToken && <TypingIndicator />}
 
           {error && (
-            <div className="flex justify-center my-4">
+            <div className="flex justify-center my-4" role="alert" aria-live="polite">
               <div className="flex items-center gap-2 text-accent bg-accent/5 border border-accent/20 rounded-lg px-4 py-2 text-sm">
-                <AlertCircle size={16} />
+                <AlertCircle size={16} aria-hidden="true" />
                 {error}
               </div>
             </div>

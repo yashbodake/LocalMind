@@ -47,16 +47,21 @@ export default function MessageBubble({
               <ol className="mb-3 ml-5 list-decimal marker:text-fg-muted">{children}</ol>
             ),
             li: ({ children }) => <li className="mb-1.5 text-fg-secondary">{children}</li>,
-            code: ({ inline, children }) =>
-              inline ? (
+            code: ({ className, children }) => {
+              const isBlock = className?.includes("language-");
+              return isBlock ? (
+                <code className="font-mono text-[12px] text-accent">{children}</code>
+              ) : (
                 <code className="font-mono bg-elevated text-accent px-1.5 py-0.5 rounded text-[12px] border border-line">
                   {children}
                 </code>
-              ) : (
-                <pre className="bg-elevated border border-line rounded-lg p-3 overflow-x-auto my-3">
-                  <code className="font-mono text-[12px] text-accent">{children}</code>
-                </pre>
-              ),
+              );
+            },
+            pre: ({ children }) => (
+              <pre className="bg-elevated border border-line rounded-lg p-3 overflow-x-auto my-3">
+                {children}
+              </pre>
+            ),
             a: ({ href, children }) => (
               <a href={href} className="text-accent underline hover:text-accent/80" target="_blank" rel="noopener noreferrer">
                 {children}
