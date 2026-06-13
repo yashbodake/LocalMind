@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, Trash2, FileText, AlertCircle, Plus, X, MessageSquare, Pencil, Check } from "lucide-react";
-import { getSources, deleteSource, updateSession, deleteSession } from "../hooks/useChat";
+import { getSources, deleteSource, updateSession, deleteSession, bulkDeleteSources, ingestText } from "../hooks/useChat";
 import FileUploader from "./FileUploader";
+import DocumentPreview from "./DocumentPreview";
+import TextPasteModal from "./TextPasteModal";
 import BrandLogo from "./BrandLogo";
 import SystemStatus from "./SystemStatus";
 import ThemeToggle from "./ThemeToggle";
@@ -26,6 +28,10 @@ export default function Sidebar({
   const [deleting, setDeleting] = useState(null);
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState(new Set());
 
   const refresh = async () => {
     setLoading(true);
@@ -76,6 +82,34 @@ export default function Sidebar({
     } else {
       onSelectDocIds(sources.map((s) => s.doc_id));
     }
+  };
+
+  const toggleBulk = (docId) => {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(docId)) next.delete(docId);
+      else next.add(docId);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(bulkSelected);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} document${ids.length !== 1 ? "s" : ""}?`)) return;
+    try {
+      await bulkDeleteSources(ids);
+      setBulkSelected(new Set());
+      setBulkMode(false);
+      refresh();
+    } catch (e) {
+      console.error("Bulk delete failed:", e);
+    }
+  };
+
+  const handlePasteSubmit = async ({ title, text }) => {
+    await ingestText(title, text);
+    refresh();
   };
 
   const startRename = (session) => {
@@ -234,6 +268,12 @@ export default function Sidebar({
 
         <div className="px-4 py-1 border-t border-line">
           <FileUploader onSuccess={refresh} />
+          <button
+            onClick={() => setShowPasteModal(true)}
+            className="w-full py-1.5 mt-2 text-[11px] font-sans text-fg-muted hover:text-accent border border-line rounded-lg transition-colors"
+          >
+            + Paste Text
+          </button>
         </div>
 
         {error && (
@@ -247,14 +287,30 @@ export default function Sidebar({
           <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-fg-muted">
             // sources ({sources.length})
           </span>
-          {sources.length > 0 && (
+          <div className="flex items-center">
+            {sources.length > 0 && !bulkMode && (
+              <button
+                onClick={toggleAll}
+                className="text-[10px] font-mono text-fg-muted hover:text-accent transition-colors"
+              >
+                {allSelected() ? "deselect all" : "select all"}
+              </button>
+            )}
             <button
-              onClick={toggleAll}
-              className="text-[10px] font-mono text-fg-muted hover:text-accent transition-colors"
+              onClick={() => { setBulkMode(!bulkMode); setBulkSelected(new Set()); }}
+              className={`text-[10px] font-mono transition-colors ${sources.length > 0 && !bulkMode ? "ml-2" : ""} ${bulkMode ? "text-accent" : "text-fg-muted hover:text-fg-secondary"}`}
             >
-              {allSelected() ? "deselect all" : "select all"}
+              {bulkMode ? "Cancel" : "Bulk"}
             </button>
-          )}
+            {bulkMode && bulkSelected.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="text-[10px] text-accent hover:text-accent/80 font-sans ml-2"
+              >
+                Delete ({bulkSelected.size})
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="overflow-y-auto overscroll-contain px-2 pb-2 max-h-[240px]">
@@ -270,30 +326,51 @@ export default function Sidebar({
                   <li
                     key={s.doc_id}
                     className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-transparent
-                      ${isChecked ? "bg-accent/5 hover:bg-accent/8" : "opacity-40 hover:opacity-70 hover:bg-elevated"}`}
+                      ${bulkMode ? "hover:bg-elevated" : isChecked ? "bg-accent/5 hover:bg-accent/8" : "opacity-40 hover:opacity-70 hover:bg-elevated"}`}
                   >
+                    {bulkMode ? (
+                      <input
+                        type="checkbox"
+                        checked={bulkSelected.has(s.doc_id)}
+                        onChange={() => toggleBulk(s.doc_id)}
+                        className="accent-accent w-3 h-3 shrink-0"
+                        aria-label={`Select ${s.filename} for deletion`}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={isChecked}
+                        aria-label={`Toggle source: ${s.filename}`}
+                        className="shrink-0 cursor-pointer"
+                        onClick={() => toggleDoc(s.doc_id)}
+                      >
+                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors
+                          ${isChecked ? "bg-accent/15 border-accent" : "border-line-hover"}`}>
+                          {isChecked && (
+                            <svg width="8" height="6" viewBox="0 0 8 6" fill="none" aria-hidden="true">
+                              <path d="M1 3L3 5L7 1" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    )}
+                    <FileText size={14} className="text-fg-muted shrink-0" aria-hidden="true" />
                     <button
-                      type="button"
-                      role="checkbox"
-                      aria-checked={isChecked}
-                      aria-label={`Source: ${s.filename}`}
-                      className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
-                      onClick={() => toggleDoc(s.doc_id)}
+                      onClick={() => !bulkMode && setPreviewDoc({ docId: s.doc_id, filename: s.filename })}
+                      className="text-fg-secondary text-xs font-medium truncate hover:text-accent transition-colors text-left min-w-0 flex-1"
                     >
-                      <div className={`w-3.5 h-3.5 rounded shrink-0 border flex items-center justify-center transition-colors
-                        ${isChecked ? "bg-accent/15 border-accent" : "border-line-hover"}`}>
-                        {isChecked && (
-                          <svg width="8" height="6" viewBox="0 0 8 6" fill="none" aria-hidden="true">
-                            <path d="M1 3L3 5L7 1" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        )}
-                      </div>
-                      <FileText size={14} className="text-fg-muted shrink-0" aria-hidden="true" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs text-fg-secondary truncate">{s.filename}</p>
-                      </div>
-                      <span className="font-mono text-[10px] text-fg-muted shrink-0">{s.chunks}ch</span>
+                      {s.filename}
                     </button>
+                    <span className="font-mono text-[10px] text-fg-muted shrink-0">{s.chunks}ch</span>
+                    {s.file_type && s.file_type !== "unknown" && (
+                      <span className="font-mono text-[9px] text-fg-muted uppercase">{s.file_type}</span>
+                    )}
+                    {s.size_kb > 0 && (
+                      <span className="font-mono text-[9px] text-fg-muted">
+                        {s.size_kb < 1024 ? `${s.size_kb.toFixed(1)}KB` : `${(s.size_kb / 1024).toFixed(1)}MB`}
+                      </span>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -302,7 +379,7 @@ export default function Sidebar({
                         }
                       }}
                       disabled={deleting === s.doc_id}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent transition-opacity"
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent transition-opacity shrink-0"
                       aria-label={`Delete ${s.filename}`}
                     >
                       <Trash2 size={12} className={deleting === s.doc_id ? "animate-spin" : ""} aria-hidden="true" />
@@ -326,6 +403,19 @@ export default function Sidebar({
           <SystemStatus vectorCount={totalChunks} />
         </div>
       </aside>
+      {previewDoc && (
+        <DocumentPreview
+          docId={previewDoc.docId}
+          filename={previewDoc.filename}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
+      {showPasteModal && (
+        <TextPasteModal
+          onClose={() => setShowPasteModal(false)}
+          onSubmit={handlePasteSubmit}
+        />
+      )}
     </>
   );
 }
