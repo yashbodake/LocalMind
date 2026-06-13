@@ -1,9 +1,11 @@
 import logging
+from typing import Optional
 
 import yaml
 
 from ingest.embedder import _get_model, _get_collection
 from models.schemas import SourceChunk
+from retrieval.reranker import rerank
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,11 @@ def _load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def retrieve(question: str, top_k: int | None = None) -> list[SourceChunk]:
+def retrieve(
+    question: str,
+    top_k: Optional[int] = None,
+    doc_ids: Optional[list[str]] = None,
+) -> list[SourceChunk]:
     config = _load_config()
     retrieval_cfg = config["retrieval"]
 
@@ -24,14 +30,29 @@ def retrieve(question: str, top_k: int | None = None) -> list[SourceChunk]:
 
     threshold = retrieval_cfg["similarity_threshold"]
 
+    reranker_cfg = retrieval_cfg.get("reranker", {})
+    reranker_enabled = reranker_cfg.get("enabled", False)
+
+    if reranker_enabled:
+        fetch_k = reranker_cfg["retrieve_k"]
+        final_k = reranker_cfg["final_k"]
+    else:
+        fetch_k = top_k
+        final_k = top_k
+
     model = _get_model()
     collection = _get_collection()
 
     query_embedding = model.encode([question], normalize_embeddings=True).tolist()
 
+    where_filter = None
+    if doc_ids:
+        where_filter = {"doc_id": {"$in": doc_ids}}
+
     results = collection.query(
         query_embeddings=query_embedding,
-        n_results=top_k,
+        n_results=fetch_k,
+        where=where_filter,
         include=["documents", "metadatas", "distances"],
     )
 
@@ -57,5 +78,14 @@ def retrieve(question: str, top_k: int | None = None) -> list[SourceChunk]:
             )
         )
 
-    logger.info("Retrieved %d chunks above threshold %.2f for query", len(chunks), threshold)
+    if reranker_enabled and len(chunks) > final_k:
+        chunks = rerank(question, chunks, final_k)
+    elif chunks:
+        chunks = chunks[:final_k]
+
+    logger.info(
+        "Retrieved %d chunks for query (reranker=%s)",
+        len(chunks),
+        reranker_enabled,
+    )
     return chunks
