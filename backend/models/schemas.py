@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -47,9 +48,17 @@ class SourceChunk(BaseModel):
     score: float
 
 
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+
+
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 5
+    history: list[HistoryMessage] = []
+    model: Optional[str] = None
+    doc_ids: Optional[list[str]] = None
 
 
 class QueryResponse(BaseModel):
@@ -63,3 +72,8 @@ class HealthResponse(BaseModel):
     chroma: str
     embed_model: str
     version: str
+
+
+class ModelsResponse(BaseModel):
+    models: list[str]
+    default: str
