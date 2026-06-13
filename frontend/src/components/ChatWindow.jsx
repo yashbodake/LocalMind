@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Menu, AlertCircle } from "lucide-react";
+import { queryStream, getSession, saveMessage, truncateMessages } from "../hooks/useChat";
+import { Menu, AlertCircle, Download } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
 import TypingIndicator from "./TypingIndicator";
 import ScrollToBottom from "./ScrollToBottom";
 import BrandLogo from "./BrandLogo";
-import { queryStream, getSession, saveMessage } from "../hooks/useChat";
+import { exportToMarkdown } from "../utils/exportChat";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
 const MAX_HISTORY_TURNS = 5;
 
@@ -28,11 +30,13 @@ export default function ChatWindow({
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState("");
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
   const abortRef = useRef(null);
   const lastQueryRef = useRef(null);
   const latencyRef = useRef(0);
+  const inputRef = useRef(null);
   const onSessionLoadedRef = useRef(onSessionLoaded);
   onSessionLoadedRef.current = onSessionLoaded;
 
@@ -50,6 +54,7 @@ export default function ChatWindow({
           followups: m.followups || null,
         }));
         setMessages(loadedMsgs);
+        setSessionTitle(data.title || "Conversation");
         onSessionLoadedRef.current?.(data);
       })
       .catch(() => {
@@ -75,6 +80,18 @@ export default function ChatWindow({
   useEffect(() => {
     if (!showScrollBtn) scrollToBottom();
   }, [messages]);
+
+  const handleStop = () => {
+    abortRef.current?.abort();
+    setStreaming(false);
+  };
+
+  useKeyboardShortcuts({
+    onNewChat: null,
+    onFocusInput: () => inputRef.current?.focus(),
+    onStop: handleStop,
+    streaming,
+  });
 
   const handleSend = async (question) => {
     setError(null);
@@ -163,11 +180,6 @@ export default function ChatWindow({
     );
   };
 
-  const handleStop = () => {
-    abortRef.current?.abort();
-    setStreaming(false);
-  };
-
   const handleRetry = () => {
     if (!lastQueryRef.current) return;
     const { question, history, model, doc_ids } = lastQueryRef.current;
@@ -178,7 +190,114 @@ export default function ChatWindow({
     handleSend(question);
   };
 
+  const handleEdit = async (messageIndex, newText) => {
+    if (streaming) return;
+    setError(null);
+
+    const truncateFrom = messageIndex;
+    const savedMessages = [...messages];
+
+    setMessages((prev) => {
+      const kept = prev.slice(0, truncateFrom);
+      return [...kept, { role: "user", content: newText }];
+    });
+
+    try {
+      await truncateMessages(sessionId, truncateFrom);
+    } catch (err) {
+      console.error("Truncate failed:", err);
+      setMessages(savedMessages);
+      setError("Failed to edit. Please try again.");
+      return;
+    }
+
+    setStreaming(true);
+
+    const history = savedMessages
+      .slice(0, truncateFrom)
+      .slice(-MAX_HISTORY_TURNS * 2)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "", sources: [] },
+    ]);
+
+    let assistantContent = "";
+    const controller = new AbortController();
+    abortRef.current = controller;
+    lastQueryRef.current = { question: newText, history, model: selectedModel, doc_ids: selectedDocIds };
+    latencyRef.current = Date.now();
+
+    await queryStream(
+      newText,
+      { history, model: selectedModel, doc_ids: selectedDocIds },
+      (chunk) => {
+        assistantContent += chunk;
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: assistantContent,
+            sources: [],
+          };
+          return updated;
+        });
+      },
+      () => {
+        const elapsed = Date.now() - latencyRef.current;
+        setStreaming(false);
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            latencyMs: elapsed,
+          };
+          return updated;
+        });
+
+        if (sessionId) {
+          saveMessage(sessionId, { role: "user", content: newText })
+            .then(() =>
+              saveMessage(sessionId, {
+                role: "assistant",
+                content: assistantContent,
+                latency_ms: elapsed,
+                model: selectedModel,
+              })
+            )
+            .then((res) => {
+              if (res.auto_title) {
+                onMessageSaved?.(res.auto_title);
+                setSessionTitle(res.auto_title);
+              }
+              if (res.followups) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    ...updated[updated.length - 1],
+                    followups: res.followups,
+                  };
+                  return updated;
+                });
+              }
+            })
+            .catch((err) => console.error("Save failed:", err));
+        }
+      },
+      (err) => {
+        setStreaming(false);
+        setError("Failed to get a response. Please try again.");
+      },
+      controller.signal
+    );
+  };
+
   const handleFollowUp = (q) => handleSend(q);
+
+  const handleExport = () => {
+    exportToMarkdown({ title: sessionTitle, id: sessionId }, messages);
+  };
 
   const lastMsg = messages[messages.length - 1];
   const waitingForFirstToken =
@@ -196,6 +315,14 @@ export default function ChatWindow({
           <Menu size={18} aria-hidden="true" />
         </button>
         <BrandLogo size="sm" />
+        <button
+          onClick={handleExport}
+          disabled={messages.length === 0 || streaming}
+          className="ml-auto p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+          aria-label="Export conversation"
+        >
+          <Download size={16} aria-hidden="true" />
+        </button>
       </div>
 
       <div
@@ -231,6 +358,9 @@ export default function ChatWindow({
             <MessageBubble
               key={i}
               {...msg}
+              messageIndex={i}
+              streaming={streaming}
+              onEdit={msg.role === "user" ? handleEdit : null}
               onFollowUp={handleFollowUp}
               onRetry={msg.role === "assistant" && i === messages.length - 1 ? handleRetry : null}
             />
@@ -254,6 +384,7 @@ export default function ChatWindow({
       {showScrollBtn && <ScrollToBottom onClick={scrollToBottom} />}
 
       <ChatInput
+        ref={inputRef}
         onSend={handleSend}
         onStop={handleStop}
         streaming={streaming}
