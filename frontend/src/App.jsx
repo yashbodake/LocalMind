@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import Sidebar from "./components/Sidebar";
 import ChatWindow from "./components/ChatWindow";
 import { getSources, getSessions, createSession } from "./hooks/useChat";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 export default function App() {
   const [sessions, setSessions] = useState([]);
@@ -74,6 +75,13 @@ export default function App() {
       setCurrentSessionId(s.id);
     } catch {}
   }, [selectedModel, selectedDocIds]);
+
+  useKeyboardShortcuts({
+    onNewChat: newChat,
+    onFocusInput: null,
+    onStop: null,
+    streaming: false,
+  });
 
   const switchSession = useCallback((id) => {
     setCurrentSessionId(id);
