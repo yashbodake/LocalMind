@@ -45,6 +45,7 @@ export default function ChatWindow({
           content: m.content,
           sources: m.sources || [],
           latencyMs: m.latency_ms,
+          followups: m.followups || null,
         }));
         setMessages(loadedMsgs);
         onSessionLoaded?.(data);
@@ -123,16 +124,27 @@ export default function ChatWindow({
 
         if (sessionId) {
           saveMessage(sessionId, { role: "user", content: question })
-            .catch(() => {});
-          saveMessage(sessionId, {
-            role: "assistant",
-            content: assistantContent,
-            latency_ms: elapsed,
-            model: selectedModel,
-          })
+            .then(() =>
+              saveMessage(sessionId, {
+                role: "assistant",
+                content: assistantContent,
+                latency_ms: elapsed,
+                model: selectedModel,
+              })
+            )
             .then((res) => {
               if (res.auto_title) {
                 onMessageSaved?.(res.auto_title);
+              }
+              if (res.followups) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    ...updated[updated.length - 1],
+                    followups: res.followups,
+                  };
+                  return updated;
+                });
               }
             })
             .catch(() => {});
@@ -163,6 +175,8 @@ export default function ChatWindow({
     });
     handleSend(question);
   };
+
+  const handleFollowUp = (q) => handleSend(q);
 
   const lastMsg = messages[messages.length - 1];
   const waitingForFirstToken =
@@ -215,6 +229,7 @@ export default function ChatWindow({
             <MessageBubble
               key={i}
               {...msg}
+              onFollowUp={handleFollowUp}
               onRetry={msg.role === "assistant" && i === messages.length - 1 ? handleRetry : null}
             />
           ))}
