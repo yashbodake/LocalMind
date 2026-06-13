@@ -61,6 +61,19 @@ def init_db() -> None:
 
         CREATE INDEX IF NOT EXISTS idx_messages_session_id
             ON messages(session_id);
+
+        CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id TEXT UNIQUE NOT NULL,
+            filename TEXT NOT NULL,
+            file_type TEXT NOT NULL,
+            size_kb REAL DEFAULT 0.0,
+            word_count INTEGER DEFAULT 0,
+            chunk_count INTEGER DEFAULT 0,
+            file_hash TEXT,
+            content TEXT,
+            ingested_at TEXT NOT NULL
+        );
         """
     )
     conn.commit()
@@ -269,3 +282,59 @@ def truncate_messages(session_id: str, from_index: int) -> int:
     )
     conn.commit()
     return deleted
+
+
+def save_document(doc_id, filename, file_type, size_kb, word_count, chunk_count, file_hash, content):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO documents (doc_id, filename, file_type, size_kb, word_count, chunk_count, file_hash, content, ingested_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (doc_id, filename, file_type, size_kb, word_count, chunk_count, file_hash, content, _now())
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_document(doc_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,))
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def get_document_by_hash(file_hash):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM documents WHERE file_hash = ?", (file_hash,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def list_documents():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM documents ORDER BY ingested_at DESC")
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_document(doc_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_documents_bulk(doc_ids):
+    if not doc_ids:
+        return 0
+    conn = get_db()
+    cursor = conn.cursor()
+    placeholders = ",".join("?" * len(doc_ids))
+    cursor.execute(f"DELETE FROM documents WHERE doc_id IN ({placeholders})", doc_ids)
+    conn.commit()
+    return cursor.rowcount
