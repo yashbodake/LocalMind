@@ -54,6 +54,10 @@ export default function ChatWindow({
       });
   }, [sessionId]);
 
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -114,26 +118,25 @@ export default function ChatWindow({
             ...updated[updated.length - 1],
             latencyMs: elapsed,
           };
-
-          if (sessionId) {
-            saveMessage(sessionId, { role: "user", content: question })
-              .catch(() => {});
-            saveMessage(sessionId, {
-              role: "assistant",
-              content: assistantContent,
-              latency_ms: elapsed,
-              model: selectedModel,
-            })
-              .then((res) => {
-                if (res.auto_title) {
-                  onMessageSaved?.(res.auto_title);
-                }
-              })
-              .catch(() => {});
-          }
-
           return updated;
         });
+
+        if (sessionId) {
+          saveMessage(sessionId, { role: "user", content: question })
+            .catch(() => {});
+          saveMessage(sessionId, {
+            role: "assistant",
+            content: assistantContent,
+            latency_ms: elapsed,
+            model: selectedModel,
+          })
+            .then((res) => {
+              if (res.auto_title) {
+                onMessageSaved?.(res.auto_title);
+              }
+            })
+            .catch(() => {});
+        }
       },
       (err) => {
         setStreaming(false);

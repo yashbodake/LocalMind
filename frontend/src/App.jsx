@@ -86,23 +86,21 @@ export default function App() {
   }, []);
 
   const handleSessionDelete = useCallback((id) => {
-    setSessions((prev) => {
-      const filtered = prev.filter((s) => s.id !== id);
-      if (id === currentSessionId) {
-        if (filtered.length > 0) {
-          setCurrentSessionId(filtered[0].id);
-        } else {
-          createSession()
-            .then((s) => {
-              setSessions([{ ...s, message_count: 0 }]);
-              setCurrentSessionId(s.id);
-            })
-            .catch(() => {});
-        }
+    const remaining = sessions.filter((s) => s.id !== id);
+    setSessions(remaining);
+    if (id === currentSessionId) {
+      if (remaining.length > 0) {
+        setCurrentSessionId(remaining[0].id);
+      } else {
+        createSession()
+          .then((s) => {
+            setSessions([{ ...s, message_count: 0 }]);
+            setCurrentSessionId(s.id);
+          })
+          .catch(() => {});
       }
-      return filtered;
-    });
-  }, [currentSessionId]);
+    }
+  }, [currentSessionId, sessions]);
 
   return (
     <div className="flex h-screen bg-base overflow-hidden">

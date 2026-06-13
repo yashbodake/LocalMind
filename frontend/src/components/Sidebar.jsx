@@ -169,55 +169,62 @@ export default function Sidebar({
               {sessions.map((s) => (
                 <li
                   key={s.id}
-                  className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer border border-transparent transition-colors
+                  className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg border border-transparent transition-colors
                     ${s.id === currentSessionId ? "bg-accent/5 border-accent/20" : "hover:bg-elevated"}`}
-                  onClick={() => onSwitchSession(s.id)}
                 >
                   <MessageSquare size={13} className="text-fg-muted shrink-0" aria-hidden="true" />
                   {editingSessionId === s.id ? (
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") confirmRename(s.id);
-                        if (e.key === "Escape") setEditingSessionId(null);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      autoFocus
-                      className="flex-1 min-w-0 bg-elevated text-fg text-xs font-sans rounded px-1.5 py-0.5 outline-none border border-accent/30"
-                    />
-                  ) : (
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-fg-secondary truncate">{s.title}</p>
-                      <p className="font-mono text-[9px] text-fg-muted">{timeAgo(s.updated_at)}</p>
-                    </div>
-                  )}
-                  {editingSessionId === s.id ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); confirmRename(s.id); }}
-                      className="p-1 rounded hover:bg-accent/10 text-accent"
-                      aria-label="Confirm rename"
-                    >
-                      <Check size={12} aria-hidden="true" />
-                    </button>
-                  ) : (
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <>
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") confirmRename(s.id);
+                          if (e.key === "Escape") setEditingSessionId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                        aria-label="Session title"
+                        className="flex-1 min-w-0 bg-elevated text-fg text-xs font-sans rounded px-1.5 py-0.5 outline-none border border-accent/30"
+                      />
                       <button
-                        onClick={(e) => { e.stopPropagation(); startRename(s); }}
-                        className="p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent"
-                        aria-label={`Rename ${s.title}`}
+                        onClick={() => confirmRename(s.id)}
+                        className="p-1 rounded hover:bg-accent/10 text-accent shrink-0"
+                        aria-label="Confirm rename"
                       >
-                        <Pencil size={11} aria-hidden="true" />
+                        <Check size={12} aria-hidden="true" />
                       </button>
+                    </>
+                  ) : (
+                    <>
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleSessionDelete(s.id); }}
-                        className="p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent"
-                        aria-label={`Delete ${s.title}`}
+                        type="button"
+                        onClick={() => onSwitchSession(s.id)}
+                        className="flex-1 min-w-0 text-left"
+                        aria-label={`Open session: ${s.title}`}
+                        aria-current={s.id === currentSessionId ? "true" : undefined}
                       >
-                        <Trash2 size={11} aria-hidden="true" />
+                        <p className="text-xs text-fg-secondary truncate">{s.title}</p>
+                        <p className="font-mono text-[9px] text-fg-muted">{timeAgo(s.updated_at)}</p>
                       </button>
-                    </div>
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          onClick={() => startRename(s)}
+                          className="p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent"
+                          aria-label={`Rename ${s.title}`}
+                        >
+                          <Pencil size={11} aria-hidden="true" />
+                        </button>
+                        <button
+                          onClick={() => handleSessionDelete(s.id)}
+                          className="p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent"
+                          aria-label={`Delete ${s.title}`}
+                        >
+                          <Trash2 size={11} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </>
                   )}
                 </li>
               ))}
