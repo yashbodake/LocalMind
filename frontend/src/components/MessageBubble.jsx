@@ -1,30 +1,14 @@
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
-import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
-import bash from "react-syntax-highlighter/dist/esm/languages/prism/bash";
-import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
-import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
-import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown";
-import sql from "react-syntax-highlighter/dist/esm/languages/prism/sql";
-import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
-
-SyntaxHighlighter.registerLanguage("python", python);
-SyntaxHighlighter.registerLanguage("javascript", javascript);
-SyntaxHighlighter.registerLanguage("bash", bash);
-SyntaxHighlighter.registerLanguage("json", json);
-SyntaxHighlighter.registerLanguage("yaml", yaml);
-SyntaxHighlighter.registerLanguage("markdown", markdown);
-SyntaxHighlighter.registerLanguage("sql", sql);
-SyntaxHighlighter.registerLanguage("typescript", typescript);
+import { Pencil, X } from "lucide-react";
 import SourceGrid from "./SourceGrid";
 import MessageActions from "./MessageActions";
 import CitationBadge from "./CitationBadge";
 import FollowUpSuggestions from "./FollowUpSuggestions";
+import CodeBlock from "./CodeBlock";
 
 const CITATION_RE = /\[(\d+)\]/g;
 
@@ -59,15 +43,84 @@ export default function MessageBubble({
   onRetry,
   followups,
   onFollowUp,
+  onEdit,
+  messageIndex,
+  streaming,
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(content);
   const isUser = role === "user";
 
+  const handleEditSubmit = () => {
+    const trimmed = editText.trim();
+    if (!trimmed || trimmed === content) {
+      setEditing(false);
+      return;
+    }
+    onEdit?.(messageIndex, trimmed);
+    setEditing(false);
+  };
+
+  const handleEditCancel = () => {
+    setEditText(content);
+    setEditing(false);
+  };
+
   if (isUser) {
+    if (editing) {
+      return (
+        <div className="flex flex-col items-end mb-7 gap-2">
+          <div className="w-full max-w-[75%]">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
+              &gt; editing query
+            </div>
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEditSubmit(); }
+                if (e.key === "Escape") handleEditCancel();
+              }}
+              autoFocus
+              rows={2}
+              className="w-full bg-surface border border-accent/30 rounded-lg p-3 text-fg text-lg font-normal leading-snug outline-none resize-none"
+              aria-label="Edit your question"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleEditCancel}
+              className="flex items-center gap-1 px-2.5 py-1 border border-line rounded-md text-fg-muted hover:text-fg text-xs transition-colors"
+            >
+              <X size={12} aria-hidden="true" /> Cancel
+            </button>
+            <button
+              onClick={handleEditSubmit}
+              className="flex items-center gap-1 px-2.5 py-1 border border-accent/30 bg-accent/10 rounded-md text-accent text-xs transition-colors"
+            >
+              Submit &amp; Regenerate
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex justify-end mb-7">
+      <div className="group flex justify-end mb-7">
         <div className="max-w-[75%]">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
-            &gt; query
+          <div className="flex items-center gap-2 mb-1.5">
+            {onEdit && !streaming && (
+              <button
+                onClick={() => setEditing(true)}
+                className="opacity-0 group-hover:opacity-100 text-fg-muted hover:text-accent transition-opacity"
+                aria-label="Edit question"
+              >
+                <Pencil size={11} aria-hidden="true" />
+              </button>
+            )}
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              &gt; query
+            </div>
           </div>
           <div className="text-fg text-lg font-normal leading-snug">
             {content}
@@ -101,25 +154,9 @@ export default function MessageBubble({
             code: ({ className, children }) => {
               const match = /language-([\w+#.-]+)/.exec(className || "");
               const lang = match ? match[1] : "text";
+              const rawCode = String(children).replace(/\n$/, "");
               return match ? (
-                <div className="relative group my-3">
-                  <span className="absolute top-2 right-3 text-[10px] font-mono text-fg-muted z-10">
-                    {lang}
-                  </span>
-                  <SyntaxHighlighter
-                    language={lang}
-                    style={oneDark}
-                    customStyle={{
-                      background: "var(--color-elevated)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                      margin: 0,
-                    }}
-                  >
-                    {String(children).replace(/\n$/, "")}
-                  </SyntaxHighlighter>
-                </div>
+                <CodeBlock lang={lang} code={rawCode} />
               ) : (
                 <code className="font-mono bg-elevated text-accent px-1.5 py-0.5 rounded text-[12px] border border-line">
                   {children}
