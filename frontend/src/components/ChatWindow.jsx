@@ -154,6 +154,7 @@ export default function ChatWindow({
             .then((res) => {
               if (res.auto_title) {
                 onMessageSaved?.(res.auto_title);
+                setSessionTitle(res.auto_title);
               }
               if (res.followups) {
                 setMessages((prev) => {
@@ -287,7 +288,10 @@ export default function ChatWindow({
       },
       (err) => {
         setStreaming(false);
-        setError("Failed to get a response. Please try again.");
+        if (!assistantContent) {
+          setError("Failed to get a response. Please try again.");
+          setMessages((prev) => prev.slice(0, -1));
+        }
       },
       controller.signal
     );
@@ -320,6 +324,19 @@ export default function ChatWindow({
           disabled={messages.length === 0 || streaming}
           className="ml-auto p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
           aria-label="Export conversation"
+          title="Export as Markdown"
+        >
+          <Download size={16} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="hidden md:flex absolute top-4 right-6 z-10">
+        <button
+          onClick={handleExport}
+          disabled={messages.length === 0 || streaming}
+          className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+          aria-label="Export conversation"
+          title="Export as Markdown"
         >
           <Download size={16} aria-hidden="true" />
         </button>

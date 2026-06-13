@@ -262,9 +262,10 @@ def truncate_messages(session_id: str, from_index: int) -> int:
         f"DELETE FROM messages WHERE id IN ({placeholders})",
         ids_to_delete
     )
+    deleted = cursor.rowcount
     cursor.execute(
         "UPDATE sessions SET updated_at = ? WHERE id = ?",
         (_now(), session_id)
     )
     conn.commit()
-    return cursor.rowcount
+    return deleted
