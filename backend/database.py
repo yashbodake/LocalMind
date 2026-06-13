@@ -55,6 +55,7 @@ def init_db() -> None:
             latency_ms  INTEGER,
             model       TEXT,
             created_at  TEXT NOT NULL,
+            followups   TEXT DEFAULT NULL,
             FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
         );
 
@@ -63,6 +64,10 @@ def init_db() -> None:
         """
     )
     conn.commit()
+    try:
+        conn.execute("ALTER TABLE messages ADD COLUMN followups TEXT DEFAULT NULL")
+    except Exception:
+        pass
     logger.info("Database schema initialized")
 
 
@@ -132,6 +137,7 @@ def get_session(session_id: str) -> dict | None:
         msg = dict(m)
         if msg.get("sources"):
             msg["sources"] = json.loads(msg["sources"])
+        msg["followups"] = json.loads(msg["followups"]) if msg.get("followups") else None
         messages.append(msg)
 
     session["messages"] = messages
@@ -227,3 +233,14 @@ def get_message_count(session_id: str) -> int:
         (session_id,),
     ).fetchone()
     return row["count"] if row else 0
+
+
+def update_message_followups(message_id: str, followups: list[str]) -> bool:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE messages SET followups = ? WHERE id = ?",
+        (json.dumps(followups), message_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
