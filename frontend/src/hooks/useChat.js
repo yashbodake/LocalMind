@@ -145,3 +145,11 @@ export async function saveMessage(sessionId, { role, content, sources, latency_m
   if (!res.ok) throw new Error("Failed to save message");
   return res.json();
 }
+
+export async function truncateMessages(sessionId, fromIndex) {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/messages?from_index=${fromIndex}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to truncate messages");
+  return res.json();
+}
