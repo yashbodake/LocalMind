@@ -1,27 +1,52 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, AlertCircle } from "lucide-react";
+import { Menu, AlertCircle } from "lucide-react";
 import MessageBubble from "./MessageBubble";
-import ModelSelector from "./ModelSelector";
+import ChatInput from "./ChatInput";
+import TypingIndicator from "./TypingIndicator";
+import ScrollToBottom from "./ScrollToBottom";
+import BrandLogo from "./BrandLogo";
 import { queryStream } from "../hooks/useChat";
 
 const MAX_HISTORY_TURNS = 5;
 
-export default function ChatWindow({ selectedModel, onSelectModel, selectedDocIds }) {
+const SUGGESTED_PROMPTS = [
+  "What is RAG?",
+  "Summarize my documents",
+  "What are embeddings?",
+];
+
+export default function ChatWindow({
+  selectedModel,
+  onSelectModel,
+  selectedDocIds,
+  onOpenSidebar,
+}) {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const scrollRef = useRef(null);
   const bottomRef = useRef(null);
+  const abortRef = useRef(null);
+  const lastQueryRef = useRef(null);
+  const latencyRef = useRef(0);
+
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    setShowScrollBtn(!atBottom && messages.length > 0);
+  };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streaming]);
+    if (!showScrollBtn) scrollToBottom();
+  }, [messages]);
 
-  const handleSend = async () => {
-    const question = input.trim();
-    if (!question || streaming) return;
-
-    setInput("");
+  const handleSend = async (question) => {
     setError(null);
 
     const history = messages
@@ -36,6 +61,11 @@ export default function ChatWindow({ selectedModel, onSelectModel, selectedDocId
       ...prev,
       { role: "assistant", content: "", sources: [] },
     ]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    lastQueryRef.current = { question, history, model: selectedModel, doc_ids: selectedDocIds };
+    latencyRef.current = Date.now();
 
     await queryStream(
       question,
@@ -53,7 +83,16 @@ export default function ChatWindow({ selectedModel, onSelectModel, selectedDocId
         });
       },
       () => {
+        const elapsed = Date.now() - latencyRef.current;
         setStreaming(false);
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            latencyMs: elapsed,
+          };
+          return updated;
+        });
       },
       (err) => {
         setStreaming(false);
@@ -61,15 +100,24 @@ export default function ChatWindow({ selectedModel, onSelectModel, selectedDocId
           setError("Failed to get a response. Please try again.");
           setMessages((prev) => prev.slice(0, -1));
         }
-      }
+      },
+      controller.signal
     );
   };
 
-  const onKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const handleStop = () => {
+    abortRef.current?.abort();
+    setStreaming(false);
+  };
+
+  const handleRetry = () => {
+    if (!lastQueryRef.current) return;
+    const { question, history, model, doc_ids } = lastQueryRef.current;
+    setMessages((prev) => {
+      const withoutLast = prev.slice(0, -1);
+      return withoutLast;
+    });
+    handleSend(question);
   };
 
   const lastMsg = messages[messages.length - 1];
@@ -77,76 +125,79 @@ export default function ChatWindow({ selectedModel, onSelectModel, selectedDocId
     streaming && lastMsg?.role === "assistant" && !lastMsg.content;
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {messages.length === 0 && !error && (
-          <div className="flex flex-col items-center justify-center h-full gap-3">
-            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
-              <Send size={24} className="text-blue-500" />
-            </div>
-            <p className="text-gray-400 text-lg">
-              Ask a question about your documents
-            </p>
-            <p className="text-gray-300 text-sm">
-              Upload files in the sidebar, then query your knowledge base
-            </p>
-          </div>
-        )}
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} {...msg} />
-        ))}
-        {waitingForFirstToken && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-2xl px-4 py-3 flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-            </div>
-          </div>
-        )}
-        {error && (
-          <div className="flex justify-center">
-            <div className="flex items-center gap-2 text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm">
-              <AlertCircle size={16} />
-              {error}
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
+    <div className="flex flex-col h-full bg-base relative">
+      <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-line bg-surface">
+        <button
+          onClick={onOpenSidebar}
+          className="p-1.5 rounded-lg text-fg-secondary hover:text-accent"
+        >
+          <Menu size={18} />
+        </button>
+        <BrandLogo size="sm" />
       </div>
 
-      <div className="border-t border-gray-200 bg-white">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-          <ModelSelector
-            selected={selectedModel}
-            onSelect={onSelectModel}
-          />
-          <span className="text-xs text-gray-400">
-            {selectedDocIds && selectedDocIds.length > 0
-              ? `Searching ${selectedDocIds.length} doc${selectedDocIds.length !== 1 ? "s" : ""}`
-              : "Searching all docs"}
-          </span>
-        </div>
-        <div className="p-4">
-          <div className="flex gap-2 max-w-3xl mx-auto">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="Ask a question..."
-              rows={1}
-              className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto"
+      >
+        <div className="max-w-[740px] mx-auto px-6 md:px-9 py-8">
+          {messages.length === 0 && !error && (
+            <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
+              <img src="/logo.png" alt="LocalMind" className="w-16 h-16 rounded-xl" />
+              <h2 className="text-fg text-xl font-semibold font-display">
+                Ask a question about your documents
+              </h2>
+              <p className="text-fg-muted text-sm text-center max-w-xs">
+                Upload files in the sidebar, then query your knowledge base
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center mt-2">
+                {SUGGESTED_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => handleSend(prompt)}
+                    className="px-3 py-1.5 text-xs font-sans text-fg-secondary border border-line rounded-lg hover:border-accent/30 hover:text-accent transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <MessageBubble
+              key={i}
+              {...msg}
+              onRetry={msg.role === "assistant" && i === messages.length - 1 ? handleRetry : null}
             />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || streaming}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Send size={18} />
-            </button>
-          </div>
+          ))}
+
+          {waitingForFirstToken && <TypingIndicator />}
+
+          {error && (
+            <div className="flex justify-center my-4">
+              <div className="flex items-center gap-2 text-accent bg-accent/5 border border-accent/20 rounded-lg px-4 py-2 text-sm">
+                <AlertCircle size={16} />
+                {error}
+              </div>
+            </div>
+          )}
+
+          <div ref={bottomRef} />
         </div>
       </div>
+
+      {showScrollBtn && <ScrollToBottom onClick={scrollToBottom} />}
+
+      <ChatInput
+        onSend={handleSend}
+        onStop={handleStop}
+        streaming={streaming}
+        selectedModel={selectedModel}
+        onSelectModel={onSelectModel}
+        selectedDocIds={selectedDocIds}
+      />
     </div>
   );
 }
