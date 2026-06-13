@@ -13,6 +13,8 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from database import init_db
+from routes.sessions import router as sessions_router
 from ingest.chunker import chunk_text
 from ingest.embedder import delete_doc, embed_and_store, list_sources
 from ingest.loader import load_file
@@ -57,6 +59,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+init_db()
+app.include_router(sessions_router)
 
 
 @app.get("/health", response_model=HealthResponse)
