@@ -24,8 +24,8 @@ Backend Changes:
     └─ CRUD: save_document, get_document, get_document_by_hash, list_documents,
        delete_document, delete_documents_bulk
   ingest/embedder.py
-    └─ list_sources: reads from SQLite documents table (not Chroma scan)
-    └─ delete_doc: also delete from SQLite
+    └─ No changes to list_sources (becomes unused; main.py calls list_documents directly)
+    └─ delete_doc: unchanged (ChromaDB only; SQLite deletion handled by caller)
   main.py
     └─ POST /ingest: store metadata + content in SQLite, hash check for dupes
     └─ POST /ingest/text: accept text, create virtual document
@@ -33,7 +33,7 @@ Backend Changes:
     └─ DELETE /sources/bulk: delete multiple docs
     └─ GET /sources: return enriched metadata
   models/schemas.py
-    └─ Update SourceInfo with file_type, word_count, file_hash
+    └─ Update SourceInfo with file_type, word_count
 
 Frontend Changes:
   Sidebar.jsx
@@ -114,6 +114,8 @@ def delete_document(doc_id):
     return cursor.rowcount > 0
 
 def delete_documents_bulk(doc_ids):
+    if not doc_ids:
+        return 0
     conn = get_db()
     cursor = conn.cursor()
     placeholders = ",".join("?" * len(doc_ids))
@@ -148,37 +150,39 @@ In `init_db()`, after existing CREATE TABLE statements:
 
 In `main.py`'s `ingest_files()`:
 
-After successful embedding (after `embed_and_store`), compute and store metadata:
+In `main.py`'s `ingest_files()`. The existing pipeline has variables: `uploaded` (UploadFile), `text` (from `load_file`), `chunks` (from `chunk_text`), `doc_id`, `size_kb`, `ingested` (accumulator list).
+
+After `text = load_file(tmp_path)` and before `embed_and_store`, add duplicate check:
 
 ```python
 import hashlib
 
-# After chunking, before or after embedding:
-file_hash = hashlib.sha256(raw_text.encode()).hexdigest()
-word_count = len(raw_text.split())
-file_type = filename.rsplit(".", 1)[-1].lower() if "." in filename else "unknown"
+file_hash = hashlib.sha256(text.encode()).hexdigest()
+word_count = len(text.split())
+file_type = uploaded.filename.rsplit(".", 1)[-1].lower() if "." in uploaded.filename else "unknown"
 
-# Check for duplicate
 existing = get_document_by_hash(file_hash)
 if existing:
-    # Skip, return as already ingested
-    results.append(IngestedFile(filename=filename, chunks=existing["chunk_count"], doc_id=existing["doc_id"]))
+    ingested.append(IngestedFile(filename=uploaded.filename, chunks=existing["chunk_count"], doc_id=existing["doc_id"]))
     continue
+```
 
-# After embed_and_store:
+After `embed_and_store()` call, store metadata in SQLite:
+
+```python
 save_document(
     doc_id=doc_id,
-    filename=filename,
+    filename=uploaded.filename,
     file_type=file_type,
     size_kb=size_kb,
     word_count=word_count,
     chunk_count=len(chunks),
     file_hash=file_hash,
-    content=raw_text,
+    content=text,
 )
 ```
 
-The `raw_text` variable is the output of `load_file()` — it's already available in the pipeline.
+Note: The existing `embed_and_store` call signature uses `embed_and_store(chunks, metadata_dict)` where metadata_dict has `doc_id`, `filename`, `source_path`. Do NOT change this call.
 
 ### `POST /ingest/text` — New endpoint
 
@@ -206,12 +210,8 @@ async def ingest_text(payload: TextIngestRequest):
     word_count = len(text.split())
 
     chunks = chunk_text(text)
-    embed_and_store(
-        chunks=chunks,
-        doc_id=doc_id,
-        filename=title,
-        source_path=title,
-    )
+    metadata = {"doc_id": doc_id, "filename": title, "source_path": title}
+    embed_and_store(chunks, metadata)
 
     save_document(
         doc_id=doc_id,
@@ -299,7 +299,10 @@ async def get_source_content(doc_id: str):
 @app.delete("/sources/bulk")
 async def remove_sources_bulk(doc_ids: list[str]):
     for doc_id in doc_ids:
-        delete_doc(doc_id)
+        try:
+            delete_doc(doc_id)
+        except Exception as e:
+            logger.warning("Failed to delete %s from ChromaDB: %s", doc_id, e)
     deleted = delete_documents_bulk(doc_ids)
     return {"status": "ok", "deleted_count": deleted}
 ```
@@ -577,7 +580,7 @@ export async function ingestText(title, text) {
 }
 ```
 
-## 7. Frontend — FileUpdater.jsx addition
+## 7. Frontend — FileUploader.jsx addition
 
 Add a "Paste Text" button below the drag-drop zone:
 
