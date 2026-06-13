@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 import yaml
 from openai import OpenAI
 
-from models.schemas import SourceChunk
+from models.schemas import SourceChunk, HistoryMessage
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +48,45 @@ def _build_context(chunks: list[SourceChunk]) -> str:
     return "\n\n".join(parts)
 
 
-def _build_messages(question: str, chunks: list[SourceChunk]) -> list[dict]:
+def _build_messages(
+    question: str,
+    chunks: list[SourceChunk],
+    history: list[HistoryMessage] | None = None,
+) -> list[dict]:
     context = _build_context(chunks)
-    return [
+
+    messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Context:\n{context}\n\nUser Question:\n{question}"},
     ]
 
+    if history:
+        history_text = "\n".join(
+            f"{('User' if h.role == 'user' else 'Assistant')}: {h.content}"
+            for h in history
+        )
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Previous conversation:\n{history_text}\n\nContext:\n{context}\n\nUser Question:\n{question}",
+            }
+        )
+    else:
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Context:\n{context}\n\nUser Question:\n{question}",
+            }
+        )
 
-def generate(question: str, chunks: list[SourceChunk]) -> str:
+    return messages
+
+
+def generate(
+    question: str,
+    chunks: list[SourceChunk],
+    history: list[HistoryMessage] | None = None,
+    model: str | None = None,
+) -> str:
     client = _get_client()
     config = _load_config()
     llm_cfg = config["llm"]
@@ -64,10 +94,11 @@ def generate(question: str, chunks: list[SourceChunk]) -> str:
     if not chunks:
         return "I couldn't find this in your knowledge base."
 
-    messages = _build_messages(question, chunks)
+    messages = _build_messages(question, chunks, history)
+    use_model = model or llm_cfg["model"]
 
     response = client.chat.completions.create(
-        model=llm_cfg["model"],
+        model=use_model,
         messages=messages,
         max_tokens=llm_cfg["max_tokens"],
         temperature=llm_cfg["temperature"],
@@ -75,11 +106,16 @@ def generate(question: str, chunks: list[SourceChunk]) -> str:
     )
 
     answer = response.choices[0].message.content
-    logger.info("Generated answer (%d chars) for question", len(answer))
+    logger.info("Generated answer (%d chars) for question using %s", len(answer), use_model)
     return answer
 
 
-async def stream(question: str, chunks: list[SourceChunk]) -> AsyncGenerator[str, None]:
+async def stream(
+    question: str,
+    chunks: list[SourceChunk],
+    history: list[HistoryMessage] | None = None,
+    model: str | None = None,
+) -> AsyncGenerator[str, None]:
     client = _get_client()
     config = _load_config()
     llm_cfg = config["llm"]
@@ -88,14 +124,15 @@ async def stream(question: str, chunks: list[SourceChunk]) -> AsyncGenerator[str
         yield "I couldn't find this in your knowledge base."
         return
 
-    messages = _build_messages(question, chunks)
+    messages = _build_messages(question, chunks, history)
+    use_model = model or llm_cfg["model"]
 
     loop = asyncio.get_event_loop()
 
     response = await loop.run_in_executor(
         None,
         lambda: client.chat.completions.create(
-            model=llm_cfg["model"],
+            model=use_model,
             messages=messages,
             max_tokens=llm_cfg["max_tokens"],
             temperature=llm_cfg["temperature"],
