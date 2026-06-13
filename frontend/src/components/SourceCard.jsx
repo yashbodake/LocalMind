@@ -8,7 +8,8 @@ export default function SourceCard({ index, filename, chunk_index, content, scor
   return (
     <button
       type="button"
-      className="w-full text-left bg-surface border border-line rounded-lg p-3 cursor-pointer hover:border-accent/20 transition-colors"
+      id={`source-${index}`}
+      className="w-full text-left bg-surface border border-line rounded-lg p-3 cursor-pointer hover:border-accent/20 transition-all"
       onClick={() => setOpen(!open)}
       aria-expanded={open}
       aria-label={`Source ${index}: ${filename}${open ? " (expanded)" : ""}`}
