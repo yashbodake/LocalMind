@@ -153,3 +153,29 @@ export async function truncateMessages(sessionId, fromIndex) {
   if (!res.ok) throw new Error("Failed to truncate messages");
   return res.json();
 }
+
+export async function getDocumentContent(docId) {
+  const res = await fetch(`${API_BASE}/sources/${docId}/content`);
+  if (!res.ok) throw new Error("Failed to load document");
+  return res.json();
+}
+
+export async function bulkDeleteSources(docIds) {
+  const res = await fetch(`${API_BASE}/sources/bulk`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(docIds),
+  });
+  if (!res.ok) throw new Error("Failed to delete sources");
+  return res.json();
+}
+
+export async function ingestText(title, text) {
+  const res = await fetch(`${API_BASE}/ingest/text`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, text }),
+  });
+  if (!res.ok) throw new Error("Failed to ingest text");
+  return res.json();
+}
