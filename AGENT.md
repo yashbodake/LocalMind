@@ -125,8 +125,9 @@ Do not add new endpoints without updating `docs/API.md`.
 | GET | `/sources` | List documents |
 | DELETE | `/sources/{doc_id}` | Delete document |
 | POST | `/query` | Ask question (non-stream) |
-| GET | `/query/stream` | Ask question (SSE stream) |
+| POST | `/query/stream` | Ask question (SSE stream) |
 | GET | `/health` | Health check |
+| GET | `/models` | List available LLM models |
 
 Full request/response shapes are in `docs/SPEC.md` §3.3.
 

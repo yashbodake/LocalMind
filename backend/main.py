@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -22,6 +22,7 @@ from models.schemas import (
     HealthResponse,
     IngestedFile,
     IngestResponse,
+    ModelsResponse,
     QueryRequest,
     QueryResponse,
     SourceInfo,
@@ -73,6 +74,15 @@ async def health():
         chroma=chroma_status,
         embed_model=config["embedding"]["model"],
         version="1.0.0",
+    )
+
+
+@app.get("/models", response_model=ModelsResponse)
+async def get_models():
+    llm_cfg = config["llm"]
+    return ModelsResponse(
+        models=llm_cfg.get("models", [llm_cfg["model"]]),
+        default=llm_cfg["model"],
     )
 
 
@@ -161,13 +171,22 @@ async def query_knowledge_base(request: QueryRequest):
     start = time.time()
 
     try:
-        chunks = retrieve(request.question, top_k=request.top_k)
+        chunks = retrieve(
+            request.question,
+            top_k=request.top_k,
+            doc_ids=request.doc_ids,
+        )
     except Exception as e:
         logger.exception("Retrieval failed")
         raise HTTPException(status_code=500, detail=f"Vector store error: {str(e)}")
 
     try:
-        answer = generate(request.question, chunks)
+        answer = generate(
+            request.question,
+            chunks,
+            history=request.history,
+            model=request.model,
+        )
     except Exception as e:
         logger.exception("LLM call failed")
         raise HTTPException(status_code=502, detail="LLM service unavailable")
@@ -181,16 +200,22 @@ async def query_knowledge_base(request: QueryRequest):
     )
 
 
-@app.get("/query/stream")
-async def query_stream(q: str = Query(...), top_k: int = Query(default=5)):
+@app.post("/query/stream")
+async def query_stream(request: QueryRequest):
     try:
-        chunks = retrieve(q, top_k=top_k)
+        chunks = retrieve(
+            request.question,
+            top_k=request.top_k,
+            doc_ids=request.doc_ids,
+        )
     except Exception as e:
         logger.exception("Retrieval failed for stream")
         raise HTTPException(status_code=500, detail=f"Vector store error: {str(e)}")
 
     async def stream_generator():
-        async for token in stream(q, chunks):
+        async for token in stream(
+            request.question, chunks, history=request.history, model=request.model
+        ):
             yield f"data: {token}\n\n"
         yield "data: [DONE]\n\n"
 
