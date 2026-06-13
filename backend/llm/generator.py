@@ -42,8 +42,15 @@ def _get_effective_llm_params(model: str | None = None) -> tuple[float, int, str
     temp_str = get_setting("llm.temperature")
     max_tokens_str = get_setting("llm.max_tokens")
 
-    temperature = float(temp_str) if temp_str else llm_cfg["temperature"]
-    max_tokens = int(max_tokens_str) if max_tokens_str else llm_cfg["max_tokens"]
+    try:
+        temperature = float(temp_str) if temp_str else llm_cfg["temperature"]
+    except (ValueError, TypeError):
+        temperature = llm_cfg["temperature"]
+
+    try:
+        max_tokens = int(max_tokens_str) if max_tokens_str else llm_cfg["max_tokens"]
+    except (ValueError, TypeError):
+        max_tokens = llm_cfg["max_tokens"]
 
     return temperature, max_tokens, use_model
 

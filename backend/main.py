@@ -142,8 +142,14 @@ async def ingest_files(files: list[UploadFile] = File(...)):
 
             user_cs = get_setting("chunking.chunk_size")
             user_co = get_setting("chunking.chunk_overlap")
-            cs = int(user_cs) if user_cs else None
-            co = int(user_co) if user_co else None
+            try:
+                cs = int(user_cs) if user_cs else None
+            except (ValueError, TypeError):
+                cs = None
+            try:
+                co = int(user_co) if user_co else None
+            except (ValueError, TypeError):
+                co = None
             chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
 
             doc_id = uuid.uuid4().hex[:12]
@@ -213,8 +219,14 @@ async def ingest_text(payload: TextIngestRequest):
 
     user_cs = get_setting("chunking.chunk_size")
     user_co = get_setting("chunking.chunk_overlap")
-    cs = int(user_cs) if user_cs else None
-    co = int(user_co) if user_co else None
+    try:
+        cs = int(user_cs) if user_cs else None
+    except (ValueError, TypeError):
+        cs = None
+    try:
+        co = int(user_co) if user_co else None
+    except (ValueError, TypeError):
+        co = None
     chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
     metadata = {"doc_id": doc_id, "filename": title, "source_path": title}
     embed_and_store(chunks, metadata)

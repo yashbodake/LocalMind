@@ -39,6 +39,7 @@ export default function SettingsModal({ onClose }) {
   const [defaults, setDefaults] = useState({});
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     getSettings()
@@ -46,7 +47,7 @@ export default function SettingsModal({ onClose }) {
         setSettings(data.effective || {});
         setDefaults(data.defaults || {});
       })
-      .catch(() => {})
+      .catch(() => setError(true))
       .finally(() => setLoaded(true));
   }, []);
 
@@ -96,6 +97,8 @@ export default function SettingsModal({ onClose }) {
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
           {!loaded ? (
             <p className="text-fg-muted text-sm">Loading…</p>
+          ) : error ? (
+            <p className="text-accent text-sm">Failed to load settings. Please try again.</p>
           ) : (
             <>
               <div className="space-y-3">
@@ -198,7 +201,7 @@ export default function SettingsModal({ onClose }) {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !loaded}
+            disabled={saving || !loaded || error}
             className="px-3 py-1.5 border border-accent/30 bg-accent/10 rounded-lg text-accent text-xs disabled:opacity-30 transition-colors"
           >
             {saving ? "Saving…" : "Save Settings"}

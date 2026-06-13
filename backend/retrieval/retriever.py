@@ -30,9 +30,15 @@ def retrieve(
     user_threshold = get_setting("retrieval.similarity_threshold")
 
     if top_k is None:
-        top_k = int(user_top_k) if user_top_k else retrieval_cfg["top_k"]
+        try:
+            top_k = int(user_top_k) if user_top_k else retrieval_cfg["top_k"]
+        except (ValueError, TypeError):
+            top_k = retrieval_cfg["top_k"]
 
-    threshold = float(user_threshold) if user_threshold else retrieval_cfg["similarity_threshold"]
+    try:
+        threshold = float(user_threshold) if user_threshold else retrieval_cfg["similarity_threshold"]
+    except (ValueError, TypeError):
+        threshold = retrieval_cfg["similarity_threshold"]
 
     reranker_cfg = retrieval_cfg.get("reranker", {})
     reranker_enabled = reranker_cfg.get("enabled", False)
