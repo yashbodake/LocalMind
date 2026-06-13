@@ -244,3 +244,27 @@ def update_message_followups(message_id: str, followups: list[str]) -> bool:
     )
     conn.commit()
     return cursor.rowcount > 0
+
+
+def truncate_messages(session_id: str, from_index: int) -> int:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM messages WHERE session_id = ? ORDER BY created_at ASC",
+        (session_id,)
+    )
+    ids = [row["id"] for row in cursor.fetchall()]
+    if from_index >= len(ids):
+        return 0
+    ids_to_delete = ids[from_index:]
+    placeholders = ",".join("?" * len(ids_to_delete))
+    cursor.execute(
+        f"DELETE FROM messages WHERE id IN ({placeholders})",
+        ids_to_delete
+    )
+    cursor.execute(
+        "UPDATE sessions SET updated_at = ? WHERE id = ?",
+        (_now(), session_id)
+    )
+    conn.commit()
+    return cursor.rowcount
