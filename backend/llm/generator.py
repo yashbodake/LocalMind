@@ -1,41 +1,26 @@
 import asyncio
 import logging
-import os
 from collections.abc import AsyncGenerator
 
-import yaml
-from openai import OpenAI
-
 from models.schemas import SourceChunk, HistoryMessage
+from llm.client import get_client, load_config
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = "config.yaml"
-
 SYSTEM_PROMPT = (
-    "You are a helpful assistant answering questions based strictly on the provided context.\n"
-    "Always cite which source (Source 1, Source 2, etc.) you used.\n"
+    "You are a helpful assistant answering questions based strictly on the provided context.\n\n"
+    "Format your response using markdown:\n"
+    "- Start with a **Brief Answer** (1-2 sentences)\n"
+    "- Use ## headings for distinct topics\n"
+    "- Use bullet points for lists and steps\n"
+    "- Use **bold** for key terms and important concepts\n"
+    "- Use tables for comparisons or structured data\n"
+    "- Use `inline code` for technical terms and ```code blocks``` for code\n"
+    "- Use $...$ for inline math and $$...$$ for block math\n"
+    "- Cite sources inline as [1], [2], etc.\n\n"
     "If the answer is not found in the context, say \"I couldn't find this in your knowledge base.\"\n"
     "Do not make up information."
 )
-
-_client: OpenAI | None = None
-
-
-def _load_config() -> dict:
-    with open(_CONFIG_PATH, "r") as f:
-        return yaml.safe_load(f)
-
-
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        config = _load_config()
-        _client = OpenAI(
-            base_url=config["llm"]["base_url"],
-            api_key=os.getenv("NVIDIA_API_KEY"),
-        )
-    return _client
 
 
 def _build_context(chunks: list[SourceChunk]) -> str:
@@ -87,8 +72,8 @@ def generate(
     history: list[HistoryMessage] | None = None,
     model: str | None = None,
 ) -> str:
-    client = _get_client()
-    config = _load_config()
+    client = get_client()
+    config = load_config()
     llm_cfg = config["llm"]
 
     if not chunks:
@@ -116,8 +101,8 @@ async def stream(
     history: list[HistoryMessage] | None = None,
     model: str | None = None,
 ) -> AsyncGenerator[str, None]:
-    client = _get_client()
-    config = _load_config()
+    client = get_client()
+    config = load_config()
     llm_cfg = config["llm"]
 
     if not chunks:
