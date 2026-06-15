@@ -20,6 +20,7 @@ export default {
           muted: 'var(--color-text-muted)',
         },
         accent: 'var(--color-accent)',
+        warning: 'var(--color-warning)',
       },
       fontFamily: {
         display: ['"Space Grotesk"', 'sans-serif'],

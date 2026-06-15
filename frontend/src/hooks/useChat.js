@@ -227,3 +227,9 @@ export async function updateFeedback(sessionId, messageId, feedback) {
   if (!res.ok) throw new Error("Failed to update feedback");
   return res.json();
 }
+
+export async function reembedAll() {
+  const res = await fetch(`${API_BASE}/sources/reembed-all`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to re-embed documents");
+  return res.json();
+}

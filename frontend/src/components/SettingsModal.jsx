@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { X, Settings } from "lucide-react";
-import { getSettings, updateSettings } from "../hooks/useChat";
+import { X, Settings, AlertTriangle, Loader2 } from "lucide-react";
+import { getSettings, updateSettings, getModels, reembedAll } from "../hooks/useChat";
 
 function SettingSlider({ label, value, defaultValue, onChange, onReset, overridden, min, max, step }) {
-  const numValue = parseFloat(value) || 0;
+  const rawValue = value !== "" && value != null ? value : defaultValue;
+  const numValue = parseFloat(rawValue) || 0;
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
@@ -40,6 +41,10 @@ export default function SettingsModal({ onClose }) {
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [models, setModels] = useState([]);
+  const [presetModel, setPresetModel] = useState("");
+  const [reembedding, setReembedding] = useState(false);
+  const [reembedMsg, setReembedMsg] = useState(null);
 
   useEffect(() => {
     getSettings()
@@ -49,6 +54,9 @@ export default function SettingsModal({ onClose }) {
       })
       .catch(() => setError(true))
       .finally(() => setLoaded(true));
+    getModels()
+      .then((data) => setModels(data.models || []))
+      .catch(() => {});
   }, []);
 
   const handleChange = (key, value) => {
@@ -72,6 +80,31 @@ export default function SettingsModal({ onClose }) {
   };
 
   const isOverridden = (key) => settings[key] !== String(defaults[key] ?? "");
+
+  const embeddingModels = [
+    "BAAI/bge-small-en-v1.5",
+    "BAAI/bge-base-en-v1.5",
+    "BAAI/bge-large-en-v1.5",
+    "sentence-transformers/all-MiniLM-L6-v2",
+    "sentence-transformers/all-mpnet-base-v2",
+  ];
+
+  const handleReembed = async () => {
+    setReembedding(true);
+    setReembedMsg(null);
+    try {
+      await updateSettings({ settings });
+      const result = await reembedAll();
+      setReembedMsg({
+        type: "success",
+        text: `Re-embedded ${result.reembedded} document(s)${result.errors?.length ? ` (${result.errors.length} failed)` : ""}`,
+      });
+    } catch (e) {
+      setReembedMsg({ type: "error", text: "Re-embed failed. Check server logs." });
+    } finally {
+      setReembedding(false);
+    }
+  };
 
   return (
     <div
@@ -187,6 +220,88 @@ export default function SettingsModal({ onClose }) {
                   overridden={isOverridden("chunking.chunk_overlap")}
                   min={0} max={512} step={32}
                 />
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Model Presets</h4>
+                <p className="text-[10px] text-fg-muted">Set per-model overrides. Takes priority over global Generation settings.</p>
+                <select
+                  value={presetModel}
+                  onChange={(e) => setPresetModel(e.target.value)}
+                  className="w-full bg-base border border-line rounded-lg px-2 py-1.5 text-fg text-xs outline-none focus:border-accent/30"
+                  aria-label="Select model for preset"
+                >
+                  <option value="">Select a model…</option>
+                  {models.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                {presetModel && (
+                  <div className="space-y-3 pt-1">
+                    <SettingSlider
+                      label="Temperature"
+                      value={settings[`llm.temperature.${presetModel}`] || ""}
+                      defaultValue={defaults["llm.temperature"]}
+                      onChange={(v) => handleChange(`llm.temperature.${presetModel}`, v)}
+                      onReset={() => setSettings((prev) => {
+                        const next = { ...prev };
+                        delete next[`llm.temperature.${presetModel}`];
+                        return next;
+                      })}
+                      overridden={settings[`llm.temperature.${presetModel}`] != null && settings[`llm.temperature.${presetModel}`] !== ""}
+                      min={0} max={2} step={0.1}
+                    />
+                    <SettingSlider
+                      label="Max Tokens"
+                      value={settings[`llm.max_tokens.${presetModel}`] || ""}
+                      defaultValue={defaults["llm.max_tokens"]}
+                      onChange={(v) => handleChange(`llm.max_tokens.${presetModel}`, v)}
+                      onReset={() => setSettings((prev) => {
+                        const next = { ...prev };
+                        delete next[`llm.max_tokens.${presetModel}`];
+                        return next;
+                      })}
+                      overridden={settings[`llm.max_tokens.${presetModel}`] != null && settings[`llm.max_tokens.${presetModel}`] !== ""}
+                      min={128} max={4096} step={128}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Embedding Model</h4>
+                <div className="flex items-start gap-2 p-2 rounded-lg bg-warning/10 border border-warning/20">
+                  <AlertTriangle size={14} className="text-warning shrink-0 mt-0.5" aria-hidden="true" />
+                  <p className="text-[10px] text-fg-secondary">
+                    Changing the embedding model requires re-embedding all documents. New model downloads on first use.
+                  </p>
+                </div>
+                <select
+                  value={settings["embedding.model"] || ""}
+                  onChange={(e) => handleChange("embedding.model", e.target.value)}
+                  className="w-full bg-base border border-line rounded-lg px-2 py-1.5 text-fg text-xs outline-none focus:border-accent/30"
+                  aria-label="Select embedding model"
+                >
+                  {embeddingModels.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                {reembedMsg && (
+                  <p className={`text-[10px] ${reembedMsg.type === "success" ? "text-accent" : "text-warning"}`}>
+                    {reembedMsg.text}
+                  </p>
+                )}
+                <button
+                  onClick={handleReembed}
+                  disabled={reembedding}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-accent/30 bg-accent/10 rounded-lg text-accent text-xs disabled:opacity-30 transition-colors"
+                >
+                  {reembedding ? (
+                    <><Loader2 size={12} className="animate-spin" aria-hidden="true" /> Re-embedding…</>
+                  ) : (
+                    "Save & Re-embed All"
+                  )}
+                </button>
               </div>
             </>
           )}

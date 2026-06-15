@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from database import (
     delete_document,
     delete_documents_bulk,
+    get_db,
     get_document,
     get_document_by_hash,
     get_setting,
@@ -27,7 +28,7 @@ from database import (
 from routes.sessions import router as sessions_router
 from routes.settings import router as settings_router
 from ingest.chunker import chunk_text
-from ingest.embedder import delete_doc, embed_and_store, list_sources
+from ingest.embedder import delete_doc, embed_and_store, list_sources, reset_model, recreate_collection
 from ingest.loader import load_file
 from llm.generator import generate, stream
 from models.schemas import (
@@ -122,15 +123,17 @@ async def ingest_files(files: list[UploadFile] = File(...)):
             continue
 
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-                content = await uploaded.read()
-                if not content:
-                    errors.append(IngestError(filename=uploaded.filename, error="File is empty"))
-                    continue
-                tmp.write(content)
-                tmp_path = tmp.name
+            content = await uploaded.read()
+            if not content:
+                errors.append(IngestError(filename=uploaded.filename, error="File is empty"))
+                continue
 
+            tmp_path = None
             try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                    tmp.write(content)
+                    tmp_path = tmp.name
+
                 text = load_file(tmp_path)
 
                 file_hash = hashlib.sha256(text.encode()).hexdigest()
@@ -190,7 +193,8 @@ async def ingest_files(files: list[UploadFile] = File(...)):
                     )
                 )
             finally:
-                os.unlink(tmp_path)
+                if tmp_path:
+                    os.unlink(tmp_path)
         except ValueError as e:
             errors.append(IngestError(filename=uploaded.filename, error=str(e)))
         except Exception as e:
@@ -487,3 +491,61 @@ async def query_stream(request: QueryRequest):
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
+@app.post("/sources/reembed-all")
+async def reembed_all_documents():
+    reset_model()
+    recreate_collection()
+
+    docs = list_documents()
+    reembedded = 0
+    errors = []
+
+    user_cs = get_setting("chunking.chunk_size")
+    user_co = get_setting("chunking.chunk_overlap")
+    try:
+        cs = int(user_cs) if user_cs else None
+    except (ValueError, TypeError):
+        cs = None
+    try:
+        co = int(user_co) if user_co else None
+    except (ValueError, TypeError):
+        co = None
+
+    for doc in docs:
+        try:
+            doc_id = doc["doc_id"]
+            text = doc.get("content", "")
+            if not text.strip():
+                continue
+
+            chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
+
+            embed_and_store(
+                chunks,
+                {
+                    "doc_id": doc_id,
+                    "filename": doc["filename"],
+                    "source_path": doc.get("filename", ""),
+                    "ingested_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+
+            file_hash = hashlib.sha256(text.encode()).hexdigest()
+            conn = get_db()
+            conn.execute(
+                "UPDATE documents SET chunk_count = ?, file_hash = ?, ingested_at = ? WHERE doc_id = ?",
+                (len(chunks), file_hash, datetime.now(timezone.utc).isoformat(), doc_id),
+            )
+            conn.commit()
+            reembedded += 1
+        except Exception as e:
+            logger.exception("Re-embed failed for %s", doc.get("doc_id"))
+            errors.append({"doc_id": doc.get("doc_id"), "filename": doc.get("filename"), "error": str(e)})
+
+    return {
+        "status": "ok" if not errors else "partial",
+        "reembedded": reembedded,
+        "errors": errors,
+    }

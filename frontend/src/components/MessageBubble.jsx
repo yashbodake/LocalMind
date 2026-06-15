@@ -9,6 +9,7 @@ import MessageActions from "./MessageActions";
 import CitationBadge from "./CitationBadge";
 import FollowUpSuggestions from "./FollowUpSuggestions";
 import CodeBlock from "./CodeBlock";
+import MermaidDiagram from "./MermaidDiagram";
 
 const CITATION_RE = /\[(\d+)\]/g;
 
@@ -159,6 +160,9 @@ export default function MessageBubble({
               const match = /language-([\w+#.-]+)/.exec(className || "");
               const lang = match ? match[1] : "text";
               const rawCode = String(children).replace(/\n$/, "");
+              if (lang === "mermaid") {
+                return <MermaidDiagram code={rawCode} />;
+              }
               return match ? (
                 <CodeBlock lang={lang} code={rawCode} />
               ) : (

@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { queryStream, getSession, saveMessage, truncateMessages, getModels, updateFeedback } from "../hooks/useChat";
-import { Menu, AlertCircle, Download } from "lucide-react";
+import { Menu, AlertCircle, Download, FileJson, FileText } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
 import TypingIndicator from "./TypingIndicator";
 import ScrollToBottom from "./ScrollToBottom";
 import BrandLogo from "./BrandLogo";
-import { exportToMarkdown } from "../utils/exportChat";
+import { exportToMarkdown, exportToJSON, exportToPDF } from "../utils/exportChat";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
 const MAX_HISTORY_TURNS = 5;
@@ -362,6 +362,14 @@ export default function ChatWindow({
     exportToMarkdown({ title: sessionTitle, id: sessionId }, messages);
   };
 
+  const handleExportJSON = () => {
+    exportToJSON({ title: sessionTitle, id: sessionId }, messages);
+  };
+
+  const handleExportPDF = () => {
+    exportToPDF({ title: sessionTitle, id: sessionId }, messages);
+  };
+
   const lastMsg = messages[messages.length - 1];
   const waitingForFirstToken =
     streaming && lastMsg?.role === "assistant" && !lastMsg.content;
@@ -381,23 +389,59 @@ export default function ChatWindow({
         <button
           onClick={handleExport}
           disabled={messages.length === 0 || streaming}
-          className="ml-auto p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
-          aria-label="Export conversation"
+          className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+          aria-label="Export as Markdown"
           title="Export as Markdown"
         >
           <Download size={16} aria-hidden="true" />
         </button>
+        <button
+          onClick={handleExportPDF}
+          disabled={messages.length === 0 || streaming}
+          className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+          aria-label="Export as PDF"
+          title="Export as PDF"
+        >
+          <FileText size={16} aria-hidden="true" />
+        </button>
+        <button
+          onClick={handleExportJSON}
+          disabled={messages.length === 0 || streaming}
+          className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+          aria-label="Export as JSON"
+          title="Export as JSON"
+        >
+          <FileJson size={16} aria-hidden="true" />
+        </button>
       </div>
 
-      <div className="hidden md:flex absolute top-4 right-6 z-10">
+      <div className="hidden md:flex absolute top-4 right-6 z-10 gap-1">
         <button
           onClick={handleExport}
           disabled={messages.length === 0 || streaming}
           className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
-          aria-label="Export conversation"
+          aria-label="Export as Markdown"
           title="Export as Markdown"
         >
           <Download size={16} aria-hidden="true" />
+        </button>
+        <button
+          onClick={handleExportPDF}
+          disabled={messages.length === 0 || streaming}
+          className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+          aria-label="Export as PDF"
+          title="Export as PDF"
+        >
+          <FileText size={16} aria-hidden="true" />
+        </button>
+        <button
+          onClick={handleExportJSON}
+          disabled={messages.length === 0 || streaming}
+          className="p-1.5 rounded-lg text-fg-secondary hover:text-accent disabled:opacity-30 transition-colors"
+          aria-label="Export as JSON"
+          title="Export as JSON"
+        >
+          <FileJson size={16} aria-hidden="true" />
         </button>
       </div>
 

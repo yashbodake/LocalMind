@@ -39,8 +39,13 @@ def _get_effective_llm_params(model: str | None = None) -> tuple[float, int, str
     llm_cfg = config["llm"]
     use_model = model or llm_cfg["model"]
 
-    temp_str = get_setting("llm.temperature")
-    max_tokens_str = get_setting("llm.max_tokens")
+    model_temp = get_setting(f"llm.temperature.{use_model}")
+    global_temp = get_setting("llm.temperature")
+    temp_str = model_temp if model_temp is not None else global_temp
+
+    model_tokens = get_setting(f"llm.max_tokens.{use_model}")
+    global_tokens = get_setting("llm.max_tokens")
+    max_tokens_str = model_tokens if model_tokens is not None else global_tokens
 
     try:
         temperature = float(temp_str) if temp_str else llm_cfg["temperature"]

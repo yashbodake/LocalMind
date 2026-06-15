@@ -7,6 +7,8 @@ import chromadb
 import yaml
 from sentence_transformers import SentenceTransformer
 
+from database import get_setting
+
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = "config.yaml"
@@ -25,11 +27,35 @@ def _get_model() -> SentenceTransformer:
     global _model
     if _model is None:
         config = _load_config()
+        model_name = get_setting("embedding.model") or config["embedding"]["model"]
         _model = SentenceTransformer(
-            config["embedding"]["model"],
+            model_name,
             device=config["embedding"]["device"],
         )
+        logger.info("Loaded embedding model: %s", model_name)
     return _model
+
+
+def reset_model() -> None:
+    global _model
+    _model = None
+    logger.info("Embedding model reset — will reload on next use")
+
+
+def recreate_collection() -> None:
+    global _client, _collection
+    config = _load_config()
+    _client = chromadb.PersistentClient(path=config["chroma"]["path"])
+    try:
+        _client.delete_collection(name=config["chroma"]["collection"])
+        logger.info("Deleted existing collection for recreation")
+    except Exception:
+        pass
+    _collection = _client.get_or_create_collection(
+        name=config["chroma"]["collection"],
+        metadata={"hnsw:space": config["chroma"]["distance"]},
+    )
+    logger.info("Recreated collection: %s", config["chroma"]["collection"])
 
 
 def _get_collection():

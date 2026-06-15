@@ -13,6 +13,7 @@
   --color-text-secondary: #a1a1aa;
   --color-text-muted: #52525b;
   --color-accent: #22d3ee;
+  --color-warning: #f59e0b;
 }
 
 .light {
@@ -26,6 +27,7 @@
   --color-text-secondary: #475569;
   --color-text-muted: #94a3b8;
   --color-accent: #0891b2;
+  --color-warning: #d97706;
 }
 
 body,

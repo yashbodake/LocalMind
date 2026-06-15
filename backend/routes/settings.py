@@ -17,7 +17,17 @@ VALID_KEYS = {
     "llm.system_prompt",
     "chunking.chunk_size",
     "chunking.chunk_overlap",
+    "embedding.model",
 }
+
+VALID_KEY_PREFIXES = (
+    "llm.temperature.",
+    "llm.max_tokens.",
+)
+
+
+def _is_valid_key(key: str) -> bool:
+    return key in VALID_KEYS or any(key.startswith(p) for p in VALID_KEY_PREFIXES)
 
 
 class SettingsUpdate(BaseModel):
@@ -50,6 +60,6 @@ async def get_settings():
 @router.put("")
 async def update_settings(payload: SettingsUpdate):
     for key, value in payload.settings.items():
-        if key in VALID_KEYS:
+        if _is_valid_key(key):
             set_setting(key, value)
     return {"status": "ok"}
