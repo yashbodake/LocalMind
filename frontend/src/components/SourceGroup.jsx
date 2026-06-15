@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { FileText, ChevronDown } from "lucide-react";
 import SourceCard from "./SourceCard";
 import ScoreBar from "./ScoreBar";
 
 export default function SourceGroup({ filename, chunks, globalIndices, defaultOpen, onViewDocument }) {
+  const groupId = useMemo(() => `grp-${globalIndices[0]}`, [globalIndices]);
   const [open, setOpen] = useState(defaultOpen);
   const bestScore = Math.max(...chunks.map((c) => c.score || 0));
 
@@ -13,6 +14,7 @@ export default function SourceGroup({ filename, chunks, globalIndices, defaultOp
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        aria-controls={`${groupId}-body`}
         className="w-full flex items-center gap-2 px-3 py-2 bg-elevated/50 hover:bg-elevated transition-colors"
       >
         <FileText size={14} className="text-accent shrink-0" aria-hidden="true" />
@@ -31,22 +33,24 @@ export default function SourceGroup({ filename, chunks, globalIndices, defaultOp
           aria-hidden="true"
         />
       </button>
-      {open && (
-        <div className="flex flex-col gap-2 p-2">
-          {chunks.map((chunk, i) => (
-            <SourceCard
-              key={globalIndices[i]}
-              index={globalIndices[i] + 1}
-              doc_id={chunk.doc_id}
-              filename={chunk.filename}
-              chunk_index={chunk.chunk_index}
-              content={chunk.content}
-              score={chunk.score}
-              onViewDocument={onViewDocument}
-            />
-          ))}
-        </div>
-      )}
+      <div
+        id={`${groupId}-body`}
+        className="flex flex-col gap-2 p-2"
+        style={{ display: open ? "flex" : "none" }}
+      >
+        {chunks.map((chunk, i) => (
+          <SourceCard
+            key={globalIndices[i]}
+            index={globalIndices[i] + 1}
+            doc_id={chunk.doc_id}
+            filename={chunk.filename}
+            chunk_index={chunk.chunk_index}
+            content={chunk.content}
+            score={chunk.score}
+            onViewDocument={onViewDocument}
+          />
+        ))}
+      </div>
     </div>
   );
 }

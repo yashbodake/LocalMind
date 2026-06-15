@@ -1,9 +1,13 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import ScoreBar from "./ScoreBar";
 
 export default function SourceTooltip({ index, source, children }) {
   const [show, setShow] = useState(false);
   const timerRef = useRef(null);
+
+  useEffect(() => {
+    return () => clearTimeout(timerRef.current);
+  }, []);
 
   const handleEnter = () => {
     timerRef.current = setTimeout(() => setShow(true), 300);

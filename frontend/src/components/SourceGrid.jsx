@@ -10,16 +10,16 @@ export default function SourceGrid({ sources }) {
     const map = new Map();
     sources.forEach((s, i) => {
       if (!map.has(s.doc_id)) {
-        map.set(s.doc_id, { filename: s.filename, chunks: [], globalIndices: [] });
+        map.set(s.doc_id, { filename: s.filename, items: [] });
       }
-      const group = map.get(s.doc_id);
-      group.chunks.push(s);
-      group.globalIndices.push(i);
+      map.get(s.doc_id).items.push({ chunk: s, globalIndex: i });
     });
     const groupArray = Array.from(map.values());
     groupArray.forEach((g) => {
+      g.items.sort((a, b) => a.chunk.chunk_index - b.chunk.chunk_index);
+      g.chunks = g.items.map((it) => it.chunk);
+      g.globalIndices = g.items.map((it) => it.globalIndex);
       g.bestScore = Math.max(...g.chunks.map((c) => c.score || 0));
-      g.chunks.sort((a, b) => a.chunk_index - b.chunk_index);
     });
     groupArray.sort((a, b) => b.bestScore - a.bestScore);
     return groupArray;

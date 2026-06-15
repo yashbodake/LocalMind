@@ -5,9 +5,10 @@ import ScoreBar from "./ScoreBar";
 export default function SourceCard({ index, doc_id, filename, chunk_index, content, score, onViewDocument }) {
   const [open, setOpen] = useState(false);
 
-  const snippet = content.length > 100 ? content.slice(0, 100) + "\u2026" : content;
+  const snippet = content && content.length > 100 ? content.slice(0, 100) + "\u2026" : content || "";
 
   const handleKeyDown = (e) => {
+    if (e.currentTarget !== e.target) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       setOpen(!open);
