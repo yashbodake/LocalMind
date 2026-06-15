@@ -21,7 +21,21 @@ export default function FileUploader({ onSuccess }) {
       const result = await uploadFiles(files);
       setProgress(100);
       const count = result.ingested?.length || 0;
-      setSuccessMsg(`${count} file${count !== 1 ? "s" : ""} ingested`);
+      const errCount = result.errors?.length || 0;
+
+      if (count > 0 && errCount > 0) {
+        setSuccessMsg(`${count} ingested, ${errCount} failed`);
+      } else if (count > 0) {
+        setSuccessMsg(`${count} file${count !== 1 ? "s" : ""} ingested`);
+      }
+
+      if (errCount > 0) {
+        const errMsgs = result.errors.map((e) => `${e.filename}: ${e.error}`).join("; ");
+        setError(errMsgs);
+      } else {
+        setError(null);
+      }
+
       setTimeout(() => setSuccessMsg(null), 3000);
       onSuccess(result);
     } catch (e) {

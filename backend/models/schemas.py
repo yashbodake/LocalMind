@@ -21,6 +21,17 @@ class IngestedFile(BaseModel):
 class IngestResponse(BaseModel):
     status: str
     ingested: list[IngestedFile]
+    errors: list = []
+
+
+class IngestError(BaseModel):
+    filename: str
+    error: str
+
+
+class URLIngestRequest(BaseModel):
+    url: str
+    title: Optional[str] = None
 
 
 class SourceInfo(BaseModel):

@@ -42,6 +42,33 @@ def _load_pdf(path: Path) -> str:
 
     if not pages:
         logger.warning("No text extracted from PDF (possibly scanned): %s", path)
-        return ""
+        return _try_ocr(path)
 
+    return "\n\n".join(pages)
+
+
+def _try_ocr(path: Path) -> str:
+    try:
+        import pytesseract
+        from pdf2image import convert_from_path
+    except ImportError:
+        raise ValueError(
+            "PDF appears to be scanned (no extractable text). "
+            "Install pytesseract and pdf2image for OCR support: "
+            "pip install pytesseract pdf2image. "
+            "Also requires system packages: tesseract-ocr, poppler-utils."
+        )
+
+    logger.info("Attempting OCR on scanned PDF: %s", path)
+    images = convert_from_path(str(path))
+    pages = []
+    for img in images:
+        text = pytesseract.image_to_string(img)
+        if text.strip():
+            pages.append(text)
+
+    if not pages:
+        raise ValueError("OCR completed but no text was extracted from the PDF.")
+
+    logger.info("OCR extracted %d pages from %s", len(pages), path)
     return "\n\n".join(pages)

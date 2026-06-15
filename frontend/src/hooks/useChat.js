@@ -180,6 +180,28 @@ export async function ingestText(title, text) {
   return res.json();
 }
 
+export async function ingestURL(url, title) {
+  const res = await fetch(`${API_BASE}/ingest/url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, title }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to ingest URL");
+  }
+  return res.json();
+}
+
+export async function reingestDocument(docId) {
+  const res = await fetch(`${API_BASE}/sources/${docId}/reingest`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to re-ingest");
+  }
+  return res.json();
+}
+
 export async function getSettings() {
   const res = await fetch(`${API_BASE}/settings`);
   if (!res.ok) throw new Error("Failed to load settings");

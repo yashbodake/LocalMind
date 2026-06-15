@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, Trash2, FileText, AlertCircle, Plus, X, MessageSquare, Pencil, Check, Settings as SettingsIcon, Pin, Search } from "lucide-react";
-import { getSources, deleteSource, updateSession, deleteSession, bulkDeleteSources, ingestText } from "../hooks/useChat";
+import { getSources, deleteSource, updateSession, deleteSession, bulkDeleteSources, ingestText, ingestURL, reingestDocument } from "../hooks/useChat";
 import FileUploader from "./FileUploader";
 import DocumentPreview from "./DocumentPreview";
 import TextPasteModal from "./TextPasteModal";
+import URLIngestModal from "./URLIngestModal";
 import SettingsModal from "./SettingsModal";
 import BrandLogo from "./BrandLogo";
 import SystemStatus from "./SystemStatus";
@@ -32,6 +33,8 @@ export default function Sidebar({
   const [editTitle, setEditTitle] = useState("");
   const [previewDoc, setPreviewDoc] = useState(null);
   const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showURLModal, setShowURLModal] = useState(false);
+  const [reingesting, setReingesting] = useState(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelected, setBulkSelected] = useState(new Set());
   const [showSettings, setShowSettings] = useState(false);
@@ -115,6 +118,23 @@ export default function Sidebar({
   const handlePasteSubmit = async ({ title, text }) => {
     await ingestText(title, text);
     refresh();
+  };
+
+  const handleURLSubmit = async ({ url, title }) => {
+    await ingestURL(url, title);
+    refresh();
+  };
+
+  const handleReingest = async (docId, filename) => {
+    setReingesting(docId);
+    try {
+      await reingestDocument(docId);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Re-ingest failed");
+    } finally {
+      setReingesting(null);
+    }
   };
 
   const startRename = (session) => {
@@ -319,12 +339,20 @@ export default function Sidebar({
 
         <div className="px-4 py-1 border-t border-line">
           <FileUploader onSuccess={refresh} />
-          <button
-            onClick={() => setShowPasteModal(true)}
-            className="w-full py-1.5 mt-2 text-[11px] font-sans text-fg-muted hover:text-accent border border-line rounded-lg transition-colors"
-          >
-            + Paste Text
-          </button>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => setShowPasteModal(true)}
+              className="flex-1 py-1.5 text-[11px] font-sans text-fg-muted hover:text-accent border border-line rounded-lg transition-colors"
+            >
+              + Paste Text
+            </button>
+            <button
+              onClick={() => setShowURLModal(true)}
+              className="flex-1 py-1.5 text-[11px] font-sans text-fg-muted hover:text-accent border border-line rounded-lg transition-colors"
+            >
+              + Ingest URL
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -425,6 +453,18 @@ export default function Sidebar({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleReingest(s.doc_id, s.filename);
+                      }}
+                      disabled={reingesting === s.doc_id}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent transition-opacity shrink-0"
+                      aria-label={`Re-ingest ${s.filename}`}
+                      title="Re-ingest with current settings"
+                    >
+                      <RefreshCw size={12} className={reingesting === s.doc_id ? "animate-spin" : ""} aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         if (window.confirm(`Delete "${s.filename}"?`)) {
                           handleDelete(s.doc_id);
                         }
@@ -475,6 +515,12 @@ export default function Sidebar({
         <TextPasteModal
           onClose={() => setShowPasteModal(false)}
           onSubmit={handlePasteSubmit}
+        />
+      )}
+      {showURLModal && (
+        <URLIngestModal
+          onClose={() => setShowURLModal(false)}
+          onSubmit={handleURLSubmit}
         />
       )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}

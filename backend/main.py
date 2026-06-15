@@ -35,12 +35,14 @@ from models.schemas import (
     HealthResponse,
     IngestedFile,
     IngestResponse,
+    IngestError,
     ModelsResponse,
     QueryRequest,
     QueryResponse,
     SourceInfo,
     SourcesResponse,
     TextIngestRequest,
+    URLIngestRequest,
 )
 from retrieval.retriever import retrieve
 
@@ -108,93 +110,95 @@ async def get_models():
 async def ingest_files(files: list[UploadFile] = File(...)):
     allowed = config["ingest"]["allowed_extensions"]
     ingested: list[IngestedFile] = []
+    errors: list[IngestError] = []
 
     for uploaded in files:
         ext = Path(uploaded.filename).suffix.lower()
         if ext not in allowed:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Only {', '.join(allowed)} supported. Got '{ext}' in '{uploaded.filename}'.",
-            )
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            content = await uploaded.read()
-            if not content:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File is empty: {uploaded.filename}",
-                )
-            tmp.write(content)
-            tmp_path = tmp.name
+            errors.append(IngestError(
+                filename=uploaded.filename,
+                error=f"Unsupported type '{ext}'. Only {', '.join(allowed)} supported.",
+            ))
+            continue
 
         try:
-            text = load_file(tmp_path)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                content = await uploaded.read()
+                if not content:
+                    errors.append(IngestError(filename=uploaded.filename, error="File is empty"))
+                    continue
+                tmp.write(content)
+                tmp_path = tmp.name
 
-            file_hash = hashlib.sha256(text.encode()).hexdigest()
-            existing_doc = get_document_by_hash(file_hash)
-            if existing_doc:
-                ingested.append(IngestedFile(
-                    filename=uploaded.filename,
-                    chunks=existing_doc["chunk_count"],
-                    doc_id=existing_doc["doc_id"],
-                ))
-                continue
-
-            user_cs = get_setting("chunking.chunk_size")
-            user_co = get_setting("chunking.chunk_overlap")
             try:
-                cs = int(user_cs) if user_cs else None
-            except (ValueError, TypeError):
-                cs = None
-            try:
-                co = int(user_co) if user_co else None
-            except (ValueError, TypeError):
-                co = None
-            chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
+                text = load_file(tmp_path)
 
-            doc_id = uuid.uuid4().hex[:12]
-            size_kb = round(len(content) / 1024, 2)
-            ingested_at = datetime.now(timezone.utc).isoformat()
+                file_hash = hashlib.sha256(text.encode()).hexdigest()
+                existing_doc = get_document_by_hash(file_hash)
+                if existing_doc:
+                    ingested.append(IngestedFile(
+                        filename=uploaded.filename,
+                        chunks=existing_doc["chunk_count"],
+                        doc_id=existing_doc["doc_id"],
+                    ))
+                    continue
 
-            embed_and_store(
-                chunks,
-                {
-                    "doc_id": doc_id,
-                    "filename": uploaded.filename,
-                    "source_path": uploaded.filename,
-                    "ingested_at": ingested_at,
-                },
-            )
+                user_cs = get_setting("chunking.chunk_size")
+                user_co = get_setting("chunking.chunk_overlap")
+                try:
+                    cs = int(user_cs) if user_cs else None
+                except (ValueError, TypeError):
+                    cs = None
+                try:
+                    co = int(user_co) if user_co else None
+                except (ValueError, TypeError):
+                    co = None
+                chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
 
-            word_count = len(text.split())
-            file_type = uploaded.filename.rsplit(".", 1)[-1].lower() if "." in uploaded.filename else "unknown"
-            save_document(
-                doc_id=doc_id,
-                filename=uploaded.filename,
-                file_type=file_type,
-                size_kb=size_kb,
-                word_count=word_count,
-                chunk_count=len(chunks),
-                file_hash=file_hash,
-                content=text,
-            )
+                doc_id = uuid.uuid4().hex[:12]
+                size_kb = round(len(content) / 1024, 2)
+                ingested_at = datetime.now(timezone.utc).isoformat()
 
-            ingested.append(
-                IngestedFile(
-                    filename=uploaded.filename,
-                    chunks=len(chunks),
-                    doc_id=doc_id,
+                embed_and_store(
+                    chunks,
+                    {
+                        "doc_id": doc_id,
+                        "filename": uploaded.filename,
+                        "source_path": uploaded.filename,
+                        "ingested_at": ingested_at,
+                    },
                 )
-            )
+
+                word_count = len(text.split())
+                file_type = uploaded.filename.rsplit(".", 1)[-1].lower() if "." in uploaded.filename else "unknown"
+                save_document(
+                    doc_id=doc_id,
+                    filename=uploaded.filename,
+                    file_type=file_type,
+                    size_kb=size_kb,
+                    word_count=word_count,
+                    chunk_count=len(chunks),
+                    file_hash=file_hash,
+                    content=text,
+                )
+
+                ingested.append(
+                    IngestedFile(
+                        filename=uploaded.filename,
+                        chunks=len(chunks),
+                        doc_id=doc_id,
+                    )
+                )
+            finally:
+                os.unlink(tmp_path)
         except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
+            errors.append(IngestError(filename=uploaded.filename, error=str(e)))
         except Exception as e:
             logger.exception("Ingest failed for %s", uploaded.filename)
-            raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
-        finally:
-            os.unlink(tmp_path)
+            errors.append(IngestError(filename=uploaded.filename, error=f"Processing failed: {str(e)}"))
 
-    return IngestResponse(status="success", ingested=ingested)
+    status = "success" if not errors else ("partial" if ingested else "error")
+    return IngestResponse(status=status, ingested=ingested, errors=errors)
 
 
 @app.post("/ingest/text")
@@ -241,6 +245,128 @@ async def ingest_text(payload: TextIngestRequest):
         status="success",
         ingested=[IngestedFile(filename=title, chunks=len(chunks), doc_id=doc_id)]
     )
+
+
+@app.post("/ingest/url")
+async def ingest_url(payload: URLIngestRequest):
+    import httpx
+    from bs4 import BeautifulSoup
+    import re
+
+    url = payload.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=422, detail="URL must start with http:// or https://")
+
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "LocalMind/1.0"})
+            resp.raise_for_status()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="URL fetch timed out (15s)")
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {str(e)}")
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+        tag.decompose()
+
+    page_title = payload.title or (soup.title.string.strip() if soup.title and soup.title.string else url)
+    body = soup.find("body") or soup
+    text = body.get_text(separator="\n", strip=True)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="No text content found at URL")
+
+    file_hash = hashlib.sha256(text.encode()).hexdigest()
+    existing = get_document_by_hash(file_hash)
+    if existing:
+        return IngestResponse(
+            status="duplicate",
+            ingested=[IngestedFile(filename=existing["filename"], chunks=existing["chunk_count"], doc_id=existing["doc_id"])]
+        )
+
+    user_cs = get_setting("chunking.chunk_size")
+    user_co = get_setting("chunking.chunk_overlap")
+    try:
+        cs = int(user_cs) if user_cs else None
+    except (ValueError, TypeError):
+        cs = None
+    try:
+        co = int(user_co) if user_co else None
+    except (ValueError, TypeError):
+        co = None
+    chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
+
+    doc_id = uuid.uuid4().hex[:12]
+    size_kb = len(text.encode()) / 1024
+    word_count = len(text.split())
+
+    embed_and_store(chunks, {"doc_id": doc_id, "filename": page_title, "source_path": url})
+
+    save_document(
+        doc_id=doc_id, filename=page_title, file_type="web",
+        size_kb=size_kb, word_count=word_count, chunk_count=len(chunks),
+        file_hash=file_hash, content=text,
+    )
+
+    return IngestResponse(
+        status="success",
+        ingested=[IngestedFile(filename=page_title, chunks=len(chunks), doc_id=doc_id)]
+    )
+
+
+@app.post("/sources/{doc_id}/reingest")
+async def reingest_document(doc_id: str):
+    doc = get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    text = doc.get("content", "")
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="No content to re-ingest")
+
+    delete_doc(doc_id)
+
+    user_cs = get_setting("chunking.chunk_size")
+    user_co = get_setting("chunking.chunk_overlap")
+    try:
+        cs = int(user_cs) if user_cs else None
+    except (ValueError, TypeError):
+        cs = None
+    try:
+        co = int(user_co) if user_co else None
+    except (ValueError, TypeError):
+        co = None
+    chunks = chunk_text(text, chunk_size=cs, chunk_overlap=co)
+
+    file_hash = hashlib.sha256(text.encode()).hexdigest()
+
+    embed_and_store(
+        chunks,
+        {
+            "doc_id": doc_id,
+            "filename": doc["filename"],
+            "source_path": doc.get("filename", ""),
+            "ingested_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+    from database import get_db
+    conn = get_db()
+    conn.execute(
+        """UPDATE documents SET chunk_count = ?, file_hash = ?, ingested_at = ?
+           WHERE doc_id = ?""",
+        (len(chunks), file_hash, datetime.now(timezone.utc).isoformat(), doc_id),
+    )
+    conn.commit()
+
+    return {
+        "status": "ok",
+        "doc_id": doc_id,
+        "filename": doc["filename"],
+        "chunk_count": len(chunks),
+    }
 
 
 @app.get("/sources", response_model=SourcesResponse)
