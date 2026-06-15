@@ -41,6 +41,10 @@ export default function MessageBubble({
   sources = [],
   latencyMs,
   onRetry,
+  onRetryWithModel,
+  models,
+  feedback,
+  onFeedback,
   followups,
   onFollowUp,
   onEdit,
@@ -198,7 +202,15 @@ export default function MessageBubble({
         )}
       {sources.length > 0 && <SourceGrid sources={sources} />}
       {(content || sources.length > 0) && (
-        <MessageActions content={content} latencyMs={latencyMs} onRetry={onRetry} />
+        <MessageActions
+          content={content}
+          latencyMs={latencyMs}
+          onRetry={onRetry}
+          onRetryWithModel={onRetryWithModel}
+          models={models}
+          feedback={feedback}
+          onFeedback={onFeedback}
+        />
       )}
     </div>
   );

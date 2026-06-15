@@ -12,6 +12,7 @@ class SessionUpdate(BaseModel):
     title: Optional[str] = None
     model: Optional[str] = None
     doc_ids: Optional[list[str]] = None
+    pinned: Optional[int] = None
 
 
 class MessageCreate(BaseModel):
@@ -20,3 +21,7 @@ class MessageCreate(BaseModel):
     sources: Optional[list[dict]] = None
     latency_ms: Optional[int] = None
     model: Optional[str] = None
+
+
+class FeedbackUpdate(BaseModel):
+    feedback: Optional[Literal["up", "down"]] = None

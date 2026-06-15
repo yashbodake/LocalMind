@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { queryStream, getSession, saveMessage, truncateMessages } from "../hooks/useChat";
+import { queryStream, getSession, saveMessage, truncateMessages, getModels, updateFeedback } from "../hooks/useChat";
 import { Menu, AlertCircle, Download } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
@@ -22,6 +22,7 @@ export default function ChatWindow({
   selectedModel,
   onSelectModel,
   selectedDocIds,
+  documents,
   onOpenSidebar,
   onSessionLoaded,
   onMessageSaved,
@@ -31,6 +32,7 @@ export default function ChatWindow({
   const [error, setError] = useState(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
+  const [models, setModels] = useState([]);
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
   const abortRef = useRef(null);
@@ -41,17 +43,25 @@ export default function ChatWindow({
   onSessionLoadedRef.current = onSessionLoaded;
 
   useEffect(() => {
+    getModels()
+      .then((data) => setModels(data.models || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!sessionId) return;
     setMessages([]);
     setError(null);
     getSession(sessionId)
       .then((data) => {
         const loadedMsgs = (data.messages || []).map((m) => ({
+          id: m.id,
           role: m.role,
           content: m.content,
           sources: m.sources || [],
           latencyMs: m.latency_ms,
           followups: m.followups || null,
+          feedback: m.feedback || null,
         }));
         setMessages(loadedMsgs);
         setSessionTitle(data.title || "Conversation");
@@ -93,8 +103,11 @@ export default function ChatWindow({
     streaming,
   });
 
-  const handleSend = async (question) => {
+  const handleSend = async (question, modelOverride, overrideDocIds) => {
     setError(null);
+
+    const effectiveModel = modelOverride || selectedModel;
+    const effectiveDocIds = overrideDocIds || selectedDocIds;
 
     const history = messages
       .slice(-MAX_HISTORY_TURNS * 2)
@@ -111,12 +124,12 @@ export default function ChatWindow({
 
     const controller = new AbortController();
     abortRef.current = controller;
-    lastQueryRef.current = { question, history, model: selectedModel, doc_ids: selectedDocIds };
+    lastQueryRef.current = { question, history, model: effectiveModel, doc_ids: effectiveDocIds };
     latencyRef.current = Date.now();
 
     await queryStream(
       question,
-      { history, model: selectedModel, doc_ids: selectedDocIds },
+      { history, model: effectiveModel, doc_ids: effectiveDocIds },
       (chunk) => {
         assistantContent += chunk;
         setMessages((prev) => {
@@ -148,10 +161,20 @@ export default function ChatWindow({
                 role: "assistant",
                 content: assistantContent,
                 latency_ms: elapsed,
-                model: selectedModel,
+                model: effectiveModel,
               })
             )
             .then((res) => {
+              if (res.id) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    ...updated[updated.length - 1],
+                    id: res.id,
+                  };
+                  return updated;
+                });
+              }
               if (res.auto_title) {
                 onMessageSaved?.(res.auto_title);
                 setSessionTitle(res.auto_title);
@@ -181,14 +204,40 @@ export default function ChatWindow({
     );
   };
 
-  const handleRetry = () => {
+  const handleRetry = (modelOverride) => {
     if (!lastQueryRef.current) return;
-    const { question, history, model, doc_ids } = lastQueryRef.current;
+    const { question } = lastQueryRef.current;
+    if (modelOverride) {
+      onSelectModel(modelOverride);
+    }
+    setMessages((prev) => prev.slice(0, -1));
+    handleSend(question, modelOverride);
+  };
+
+  const handleFeedback = async (messageIndex, feedback) => {
+    const msg = messages[messageIndex];
+    if (!msg?.id) return;
+
     setMessages((prev) => {
-      const withoutLast = prev.slice(0, -1);
-      return withoutLast;
+      const updated = [...prev];
+      updated[messageIndex] = { ...updated[messageIndex], feedback };
+      return updated;
     });
-    handleSend(question);
+
+    try {
+      await updateFeedback(sessionId, msg.id, feedback);
+    } catch (err) {
+      console.error("Feedback failed:", err);
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[messageIndex] = { ...updated[messageIndex], feedback: msg.feedback };
+        return updated;
+      });
+    }
+  };
+
+  const handleSendFromInput = (question, mentionedDocIds) => {
+    handleSend(question, null, mentionedDocIds);
   };
 
   const handleEdit = async (messageIndex, newText) => {
@@ -268,6 +317,16 @@ export default function ChatWindow({
               })
             )
             .then((res) => {
+              if (res.id) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    ...updated[updated.length - 1],
+                    id: res.id,
+                  };
+                  return updated;
+                });
+              }
               if (res.auto_title) {
                 onMessageSaved?.(res.auto_title);
                 setSessionTitle(res.auto_title);
@@ -380,6 +439,9 @@ export default function ChatWindow({
               onEdit={msg.role === "user" ? handleEdit : null}
               onFollowUp={handleFollowUp}
               onRetry={msg.role === "assistant" && i === messages.length - 1 ? handleRetry : null}
+              onRetryWithModel={msg.role === "assistant" && i === messages.length - 1 ? handleRetry : null}
+              models={models}
+              onFeedback={msg.role === "assistant" ? (feedback) => handleFeedback(i, feedback) : null}
             />
           ))}
 
@@ -402,12 +464,13 @@ export default function ChatWindow({
 
       <ChatInput
         ref={inputRef}
-        onSend={handleSend}
+        onSend={handleSendFromInput}
         onStop={handleStop}
         streaming={streaming}
         selectedModel={selectedModel}
         onSelectModel={onSelectModel}
         selectedDocIds={selectedDocIds}
+        documents={documents}
       />
     </div>
   );

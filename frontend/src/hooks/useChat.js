@@ -120,11 +120,11 @@ export async function getSession(id) {
   return res.json();
 }
 
-export async function updateSession(id, { title, model, doc_ids }) {
+export async function updateSession(id, { title, model, doc_ids, pinned }) {
   const res = await fetch(`${API_BASE}/sessions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, model, doc_ids }),
+    body: JSON.stringify({ title, model, doc_ids, pinned }),
   });
   if (!res.ok) throw new Error("Failed to update session");
   return res.json();
@@ -193,5 +193,15 @@ export async function updateSettings(settings) {
     body: JSON.stringify(settings),
   });
   if (!res.ok) throw new Error("Failed to save settings");
+  return res.json();
+}
+
+export async function updateFeedback(sessionId, messageId, feedback) {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/messages/${messageId}/feedback`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ feedback }),
+  });
+  if (!res.ok) throw new Error("Failed to update feedback");
   return res.json();
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Trash2, FileText, AlertCircle, Plus, X, MessageSquare, Pencil, Check, Settings as SettingsIcon } from "lucide-react";
+import { RefreshCw, Trash2, FileText, AlertCircle, Plus, X, MessageSquare, Pencil, Check, Settings as SettingsIcon, Pin, Search } from "lucide-react";
 import { getSources, deleteSource, updateSession, deleteSession, bulkDeleteSources, ingestText } from "../hooks/useChat";
 import FileUploader from "./FileUploader";
 import DocumentPreview from "./DocumentPreview";
@@ -34,6 +34,7 @@ export default function Sidebar({
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelected, setBulkSelected] = useState(new Set());
   const [showSettings, setShowSettings] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const refresh = async () => {
     setLoading(true);
@@ -154,6 +155,16 @@ export default function Sidebar({
 
   const totalChunks = sources.reduce((sum, s) => sum + s.chunks, 0);
 
+  const filteredSessions = searchQuery
+    ? sessions.filter((s) => s.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : sessions;
+
+  const handlePinToggle = (s) => {
+    const newPinned = s.pinned ? 0 : 1;
+    updateSession(s.id, { pinned: newPinned });
+    onSessionUpdate(s.id, { pinned: newPinned });
+  };
+
   return (
     <>
       {sidebarOpen && (
@@ -190,6 +201,28 @@ export default function Sidebar({
             <Plus size={14} aria-hidden="true" />
             new --chat
           </button>
+          {sessions.length > 5 && (
+            <div className="relative mt-2">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-muted" aria-hidden="true" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search sessions…"
+                aria-label="Search sessions"
+                className="w-full bg-elevated border border-line rounded-lg pl-7 pr-2.5 py-1.5 text-fg text-xs font-sans placeholder:text-fg-muted outline-none focus:border-accent/30"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg"
+                  aria-label="Clear search"
+                >
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="px-4 py-1">
@@ -198,11 +231,13 @@ export default function Sidebar({
           </span>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain px-2 min-h-0">
-          {sessions.length === 0 ? (
-            <p className="text-xs text-fg-muted text-center py-4 px-2">No conversations yet</p>
+          {filteredSessions.length === 0 ? (
+            <p className="text-xs text-fg-muted text-center py-4 px-2">
+              {searchQuery ? "No sessions found" : "No conversations yet"}
+            </p>
           ) : (
             <ul className="space-y-0.5">
-              {sessions.map((s) => (
+              {filteredSessions.map((s) => (
                 <li
                   key={s.id}
                   className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg border border-transparent transition-colors
@@ -244,7 +279,15 @@ export default function Sidebar({
                         <p className="text-xs text-fg-secondary truncate">{s.title}</p>
                         <p className="font-mono text-[9px] text-fg-muted">{timeAgo(s.updated_at)}</p>
                       </button>
-                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <div className={`flex items-center transition-opacity shrink-0 ${s.pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                        <button
+                          onClick={() => handlePinToggle(s)}
+                          className={`p-1 rounded hover:bg-accent/10 ${s.pinned ? "text-accent" : "text-fg-muted hover:text-accent"}`}
+                          aria-label={s.pinned ? "Unpin session" : "Pin session"}
+                          aria-pressed={s.pinned ? "true" : "false"}
+                        >
+                          <Pin size={11} aria-hidden="true" />
+                        </button>
                         <button
                           onClick={() => startRename(s)}
                           className="p-1 rounded hover:bg-accent/10 text-fg-muted hover:text-accent"

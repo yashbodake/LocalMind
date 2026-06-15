@@ -87,6 +87,14 @@ def init_db() -> None:
         conn.execute("ALTER TABLE messages ADD COLUMN followups TEXT DEFAULT NULL")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE sessions ADD COLUMN pinned INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE messages ADD COLUMN feedback TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
     logger.info("Database schema initialized")
 
 
@@ -127,10 +135,10 @@ def create_session(
 def get_sessions() -> list[dict]:
     conn = get_db()
     rows = conn.execute(
-        """SELECT s.id, s.title, s.updated_at,
+        """SELECT s.id, s.title, s.updated_at, s.pinned,
                   (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) as message_count
            FROM sessions s
-           ORDER BY s.updated_at DESC"""
+           ORDER BY s.pinned DESC, s.updated_at DESC"""
     ).fetchall()
     return [dict(row) for row in rows]
 
@@ -168,6 +176,7 @@ def update_session(
     title: str | None = None,
     model: str | None = None,
     doc_ids: list[str] | None = None,
+    pinned: int | None = None,
 ) -> dict | None:
     conn = get_db()
     row = conn.execute(
@@ -180,12 +189,13 @@ def update_session(
     new_title = title if title is not None else existing["title"]
     new_model = model if model is not None else existing["model"]
     new_doc_ids = json.dumps(doc_ids) if doc_ids is not None else existing["doc_ids"]
+    new_pinned = pinned if pinned is not None else existing.get("pinned", 0)
     now = _now()
 
     conn.execute(
-        """UPDATE sessions SET title = ?, model = ?, doc_ids = ?, updated_at = ?
+        """UPDATE sessions SET title = ?, model = ?, doc_ids = ?, pinned = ?, updated_at = ?
            WHERE id = ?""",
-        (new_title, new_model, new_doc_ids, now, session_id),
+        (new_title, new_model, new_doc_ids, new_pinned, now, session_id),
     )
     conn.commit()
     return get_session(session_id)
@@ -260,6 +270,17 @@ def update_message_followups(message_id: str, followups: list[str]) -> bool:
     cursor.execute(
         "UPDATE messages SET followups = ? WHERE id = ?",
         (json.dumps(followups), message_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def update_message_feedback(message_id: str, feedback: str | None) -> bool:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE messages SET feedback = ? WHERE id = ?",
+        (feedback, message_id),
     )
     conn.commit()
     return cursor.rowcount > 0

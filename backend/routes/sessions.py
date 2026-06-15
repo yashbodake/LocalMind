@@ -12,9 +12,10 @@ from database import (
     save_message as db_save_message,
     get_message_count,
     update_message_followups as db_update_message_followups,
+    update_message_feedback as db_update_feedback,
     truncate_messages as db_truncate_messages,
 )
-from models.session_schemas import SessionCreate, SessionUpdate, MessageCreate
+from models.session_schemas import SessionCreate, SessionUpdate, MessageCreate, FeedbackUpdate
 from llm.title_generator import generate_title
 from llm.followup_generator import generate_followups
 
@@ -53,6 +54,7 @@ async def update_session(session_id: str, payload: SessionUpdate):
         title=payload.title,
         model=payload.model,
         doc_ids=payload.doc_ids,
+        pinned=payload.pinned,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -138,3 +140,11 @@ async def save_message(session_id: str, payload: MessageCreate):
         result["auto_title"] = auto_title
 
     return result
+
+
+@router.patch("/{session_id}/messages/{message_id}/feedback")
+async def update_message_feedback(session_id: str, message_id: str, payload: FeedbackUpdate):
+    updated = db_update_feedback(message_id, payload.feedback)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"status": "ok", "feedback": payload.feedback}

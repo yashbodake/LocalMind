@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Sidebar from "./components/Sidebar";
 import ChatWindow from "./components/ChatWindow";
 import { getSources, getSessions, createSession } from "./hooks/useChat";
@@ -9,6 +9,7 @@ export default function App() {
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [selectedModel, setSelectedModel] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState(null);
+  const [sources, setSources] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [theme, setTheme] = useState(() => {
@@ -34,6 +35,7 @@ export default function App() {
   useEffect(() => {
     getSources()
       .then((data) => {
+        setSources(data.sources || []);
         if (selectedDocIds === null) {
           const ids = (data.sources || []).map((s) => s.doc_id);
           setSelectedDocIds(ids);
@@ -76,6 +78,16 @@ export default function App() {
     } catch {}
   }, [selectedModel, selectedDocIds]);
 
+  const sortedSessions = useMemo(
+    () => [...sessions].sort((a, b) => {
+      const pa = a.pinned || 0;
+      const pb = b.pinned || 0;
+      if (pb !== pa) return pb - pa;
+      return new Date(b.updated_at) - new Date(a.updated_at);
+    }),
+    [sessions]
+  );
+
   useKeyboardShortcuts({
     onNewChat: newChat,
     onFocusInput: null,
@@ -113,7 +125,7 @@ export default function App() {
   return (
     <div className="flex h-screen bg-base overflow-hidden">
       <Sidebar
-        sessions={sessions}
+        sessions={sortedSessions}
         currentSessionId={currentSessionId}
         onSwitchSession={switchSession}
         onSessionUpdate={handleSessionUpdate}
@@ -134,6 +146,7 @@ export default function App() {
             selectedModel={selectedModel}
             onSelectModel={setSelectedModel}
             selectedDocIds={selectedDocIds}
+            documents={sources}
             onOpenSidebar={() => setSidebarOpen(true)}
             onSessionLoaded={(session) => {
               if (session.model) setSelectedModel(session.model);
