@@ -22,6 +22,7 @@ export default function Sidebar({
   onCloseSidebar,
   theme,
   onToggleTheme,
+  onSourcesUpdate,
 }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -42,6 +43,7 @@ export default function Sidebar({
     try {
       const data = await getSources();
       setSources(data.sources || []);
+      onSourcesUpdate?.(data.sources || []);
     } catch {
       setError("Failed to load sources");
     } finally {
@@ -160,9 +162,13 @@ export default function Sidebar({
     : sessions;
 
   const handlePinToggle = (s) => {
-    const newPinned = s.pinned ? 0 : 1;
-    updateSession(s.id, { pinned: newPinned });
+    const oldPinned = s.pinned;
+    const newPinned = oldPinned ? 0 : 1;
     onSessionUpdate(s.id, { pinned: newPinned });
+    updateSession(s.id, { pinned: newPinned }).catch((err) => {
+      console.error("Pin toggle failed:", err);
+      onSessionUpdate(s.id, { pinned: oldPinned });
+    });
   };
 
   return (

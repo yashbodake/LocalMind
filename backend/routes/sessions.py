@@ -144,6 +144,12 @@ async def save_message(session_id: str, payload: MessageCreate):
 
 @router.patch("/{session_id}/messages/{message_id}/feedback")
 async def update_message_feedback(session_id: str, message_id: str, payload: FeedbackUpdate):
+    session = db_get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    belongs = any(m["id"] == message_id for m in session.get("messages", []))
+    if not belongs:
+        raise HTTPException(status_code=404, detail="Message not found in this session")
     updated = db_update_feedback(message_id, payload.feedback)
     if not updated:
         raise HTTPException(status_code=404, detail="Message not found")

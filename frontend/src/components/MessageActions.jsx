@@ -1,9 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Copy, Check, RotateCcw, ChevronDown, ThumbsUp, ThumbsDown } from "lucide-react";
 
 export default function MessageActions({ content, latencyMs, onRetry, onRetryWithModel, models, feedback, onFeedback }) {
   const [copied, setCopied] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const handler = (e) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target)) {
+        setModelMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelMenuOpen]);
 
   const handleCopy = async () => {
     try {
@@ -24,10 +36,12 @@ export default function MessageActions({ content, latencyMs, onRetry, onRetryWit
         {copied ? "Copied" : "Copy"}
       </button>
       {onRetry && (
-        <div className="relative flex items-center">
+        <div className="relative flex items-center" ref={modelMenuRef}>
           <button
             onClick={onRetry}
-            className="flex items-center gap-1.5 px-2.5 py-1 border border-line rounded-l-md text-fg-muted hover:text-fg-secondary hover:border-line-hover text-xs transition-colors font-sans"
+            className={`flex items-center gap-1.5 px-2.5 py-1 border border-line text-fg-muted hover:text-fg-secondary hover:border-line-hover text-xs transition-colors font-sans ${
+              onRetryWithModel && models && models.length > 0 ? "rounded-l-md" : "rounded-md"
+            }`}
             aria-label="Retry response"
           >
             <RotateCcw size={12} aria-hidden="true" />

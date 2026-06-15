@@ -137,6 +137,7 @@ export default function App() {
         onCloseSidebar={() => setSidebarOpen(false)}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onSourcesUpdate={setSources}
       />
       <main className="flex-1 min-w-0">
         {currentSessionId ? (
