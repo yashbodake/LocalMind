@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from pypdf import PdfReader
+import pymupdf4llm
 
 logger = logging.getLogger(__name__)
 
@@ -33,42 +33,17 @@ def _load_text(path: Path) -> str:
 
 
 def _load_pdf(path: Path) -> str:
-    reader = PdfReader(str(path))
-    pages = []
-    for page in reader.pages:
-        page_text = page.extract_text()
-        if page_text:
-            pages.append(page_text)
-
-    if not pages:
-        logger.warning("No text extracted from PDF (possibly scanned): %s", path)
-        return _try_ocr(path)
-
-    return "\n\n".join(pages)
-
-
-def _try_ocr(path: Path) -> str:
     try:
-        import pytesseract
-        from pdf2image import convert_from_path
-    except ImportError:
+        text = pymupdf4llm.to_markdown(str(path))
+    except Exception as e:
+        logger.exception("PyMuPDF4LLM failed on %s", path)
+        raise ValueError(f"Failed to parse PDF: {e}") from e
+
+    if not text or not text.strip():
         raise ValueError(
-            "PDF appears to be scanned (no extractable text). "
-            "Install pytesseract and pdf2image for OCR support: "
-            "pip install pytesseract pdf2image. "
-            "Also requires system packages: tesseract-ocr, poppler-utils."
+            "No text extracted from PDF. If this is a scanned document, "
+            "install Tesseract OCR for automatic OCR support."
         )
 
-    logger.info("Attempting OCR on scanned PDF: %s", path)
-    images = convert_from_path(str(path))
-    pages = []
-    for img in images:
-        text = pytesseract.image_to_string(img)
-        if text.strip():
-            pages.append(text)
-
-    if not pages:
-        raise ValueError("OCR completed but no text was extracted from the PDF.")
-
-    logger.info("OCR extracted %d pages from %s", len(pages), path)
-    return "\n\n".join(pages)
+    logger.info("PyMuPDF4LLM extracted %d chars from %s", len(text), path.name)
+    return text
